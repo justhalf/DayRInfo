@@ -11,11 +11,11 @@ import sys
 from argparse import ArgumentParser
 import discord
 import logging
+import os
 
 logging.basicConfig(level=logging.INFO)
 
 CLIENT_ID = '839181905249304606'
-CLIENT_SECRET = None
 
 PUBLIC_KEY = '8e3a6e541e5954298dc0087903037ef6d7c5480d599f2ae8c25d796af4e6ac25'
 
@@ -51,17 +51,15 @@ async def on_message(message):
 def main(args=None):
     global client
     parser = ArgumentParser(description='')
-    parser.add_argument('--client_secret_path', default='client_secret.txt',
-                        help='The path to client secret')
     parser.add_argument('--token_path', default='token.txt',
                         help='The path to the token')
     args = parser.parse_args(args)
-    client_secret_path = args.client_secret_path
     token_path = args.token_path
-    with open(client_secret_path, 'r') as infile:
-        CLIENT_SECRET = infile.read().strip()
-    with open(token_path, 'r') as infile:
-        TOKEN = infile.read().strip()
+    try:
+        with open(token_path, 'r') as infile:
+            TOKEN = infile.read().strip()
+    except:
+        TOKEN = os.environ.get('TOKEN')
 
     client.run(TOKEN)
 
