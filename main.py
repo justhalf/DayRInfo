@@ -10,11 +10,18 @@ __date__ = '2021-05-05'
 import sys
 from argparse import ArgumentParser
 import discord
+import logging
+
+logging.basicConfig(level=logging.INFO)
 
 CLIENT_ID = '839181905249304606'
 CLIENT_SECRET = None
 
 PUBLIC_KEY = '8e3a6e541e5954298dc0087903037ef6d7c5480d599f2ae8c25d796af4e6ac25'
+
+TOKEN = None
+
+client = discord.Client()
 
 @client.event
 async def on_ready():
@@ -26,19 +33,37 @@ async def on_message(message):
         return
 
     if message.content.startswith('$hello'):
-        await message.channel.send('Hello!')
+        logging.info(f'{dir(message)}')
+        logging.info(f'Received message: {message.content} from {message.author} at {message.created_at}')
+        await message.add_reaction('\U0001f44c')
+        await message.channel.send(**{
+            'content': 'Hello too!',
+            'reference': message.to_reference(),
+            'mention_author': True,
+            'embed': discord.Embed.from_dict({
+                'title': 'An image',
+                'image': {
+                    'url': 'https://dayr-map.info/map_tiles/0/7/4.png',
+                    }
+                }),
+            })
 
 def main(args=None):
+    global client
     parser = ArgumentParser(description='')
     parser.add_argument('--client_secret_path', default='client_secret.txt',
                         help='The path to client secret')
+    parser.add_argument('--token_path', default='token.txt',
+                        help='The path to the token')
     args = parser.parse_args(args)
     client_secret_path = args.client_secret_path
+    token_path = args.token_path
     with open(client_secret_path, 'r') as infile:
         CLIENT_SECRET = infile.read().strip()
+    with open(token_path, 'r') as infile:
+        TOKEN = infile.read().strip()
 
-    client = discord.Client()
-    client.run(CLIENT_SECRET)
+    client.run(TOKEN)
 
 if __name__ == '__main__':
     main()
