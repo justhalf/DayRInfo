@@ -1,1 +1,2 @@
 discord==1.0.1
+Pillow==8.2.0
