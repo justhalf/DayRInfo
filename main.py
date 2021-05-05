@@ -16,23 +16,22 @@ import os
 logging.basicConfig(level=logging.INFO)
 
 CLIENT_ID = '839181905249304606'
-
 PUBLIC_KEY = '8e3a6e541e5954298dc0087903037ef6d7c5480d599f2ae8c25d796af4e6ac25'
-
 TOKEN = None
+PREFIX = f'<@!{CLIENT_ID}>'
 
 client = discord.Client()
 
 @client.event
 async def on_ready():
-    print('We have logged in as {0.user}'.format(client))
+    print(f'We have logged in as {client.user}')
 
 @client.event
 async def on_message(message):
     if message.author == client.user:
         return
 
-    if message.content.startswith('$hello'):
+    if message.content.startswith(PREFIX):
         logging.info(f'{dir(message)}')
         logging.info(f'Received message: {message.content} from {message.author} at {message.created_at}')
         await message.add_reaction('\U0001f44c')
@@ -40,8 +39,10 @@ async def on_message(message):
             'content': 'Hello too!',
             'reference': message.to_reference(),
             'mention_author': True,
+            # 'file': discord.File('4.png'),
             'embed': discord.Embed.from_dict({
                 'title': 'An image',
+                'description': 'This is a description',
                 'image': {
                     'url': 'https://dayr-map.info/map_tiles/0/7/4.png',
                     }
@@ -49,7 +50,6 @@ async def on_message(message):
             })
 
 def main(args=None):
-    global client
     parser = ArgumentParser(description='')
     parser.add_argument('--token_path', default='token.txt',
                         help='The path to the token')
@@ -60,7 +60,6 @@ def main(args=None):
             TOKEN = infile.read().strip()
     except:
         TOKEN = os.environ.get('TOKEN')
-
     client.run(TOKEN)
 
 if __name__ == '__main__':
