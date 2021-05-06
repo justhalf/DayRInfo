@@ -19,6 +19,7 @@ from io import BytesIO
 from asyncio import create_task as run
 import wikitextparser as WTP
 import requests
+import json
 
 logging.basicConfig(level=logging.INFO)
 
@@ -216,9 +217,23 @@ class Controller:
             })
 
     async def recipe(self, msg, args):
-        item = args
-        url = Controller.WIKI_API_URL + args.strip()
-        wikitext = str(requests.get(url).content)
+        item = args.strip()
+        url = Controller.WIKI_API_URL + item
+        response = requests.get(url).text
+        try:
+            pages = json.loads(response)['query']['pages']
+            key = list(pages.keys())[0]
+            wikitext = pages[key]['revisions'][0]['slots']['main']['*']
+            if wikitext.startswith('#REDIRECT'):
+                item = wikitext.split(' ', maxsplit=1)[1][2:-2]
+                url = Controller.WIKI_API_URL + item
+                response = requests.get(url).text
+                pages = json.loads(response)['query']['pages']
+                key = list(pages.keys())[0]
+                wikitext = pages[key]['revisions'][0]['slots']['main']['*']
+        except Exception as e:
+            logging.error(e)
+            return
         for template in WTP.parse(wikitext).templates:
             if template.name == 'Recipe':
                 args = template.arguments
@@ -235,14 +250,16 @@ class Controller:
                         if '=' not in arg:
                             amount = int(args[idx+1].string.strip(' |'))
                             if amount > 0:
-                                ingredients.append(f'{arg.title()} x{amount}')
+                                ingredients.append(f'{arg.capitalize()} x{amount}')
                             else:
-                                ingredients.append(f'{arg.title()}')
+                                ingredients.append(f'{arg.capitalize()}')
                             idx += 1
                         elif arg.startswith('Tool'):
-                            tools.append(arg.split('=', maxsplit=1)[1].strip())
+                            tools.append(arg.split('=', maxsplit=1)[1].strip().capitalize())
                         elif arg.startswith('input'):
-                            parse_args(WTP.parse(arg.split('=', maxsplit=1)[1].strip()).templates[0].arguments)
+                            templates = WTP.parse(arg.split('=', maxsplit=1)[1].strip()).templates
+                            if len(templates) > 0:
+                                parse_args(templates[0].arguments)
                         idx += 1
                 parse_args(args)
                 ingredients = '• '+'\n• '.join(ingredients)
