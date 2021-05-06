@@ -17,6 +17,8 @@ from PIL import Image, ImageDraw
 from pathlib import Path
 from io import BytesIO
 from asyncio import create_task as run
+import wikitextparser as WTP
+import requests
 
 logging.basicConfig(level=logging.INFO)
 
@@ -166,11 +168,14 @@ async def on_ready():
 class Controller:
     """The list of supported commands, mapped to its description"""
     commands = {
-            'help': ('', '\U00002753 Show this help'),
-            'echo': ('text', '\U0001F524 Return back your text'),
+            'help': ('', '\U00002753 Show this help', True),
+            'echo': ('text', '\U0001F524 Return back your text', False),
+            'recipe': ('itemName', '\U0001F4DC Return the recipe for the specified item', True),
             }
 
     KEY_REGEX = f'^(<@!?{CLIENT_ID}>).*$'
+
+    WIKI_API_URL = 'https://dayr.fandom.com/api.php?action=query&prop=revisions&rvprop=content&format=json&rvslots=main&titles='
 
     @staticmethod
     def get_args(msg):
@@ -188,11 +193,17 @@ class Controller:
             args = full_command[1]
         return command, args
 
+    @staticmethod
+    def is_enabled(command):
+        if command not in Controller.commands:
+            return False
+        return Controller.commands[command][2]
+
     def __init__(self):
         pass
 
     async def execute(self, msg, command, args):
-        if command not in Controller.commands:
+        if not Controller.is_enabled(command):
             await self.not_found(msg, command)
             return
         await self.__getattribute__(command)(msg, args)
@@ -204,13 +215,57 @@ class Controller:
             'mention_author': True,
             })
 
+    async def recipe(self, msg, args):
+        item = args
+        url = Controller.WIKI_API_URL + args.strip()
+        wikitext = str(requests.get(url).content)
+        for template in WTP.parse(wikitext).templates:
+            if template.name == 'Recipe':
+                args = template.arguments
+                logging.info(args)
+                ingredients = []
+                tools = []
+                def parse_args(args):
+                    idx = 0
+                    while idx < len(args):
+                        arg = args[idx].string.strip(' |')
+                        if arg == '':
+                            idx += 1
+                            continue
+                        if '=' not in arg:
+                            amount = int(args[idx+1].string.strip(' |'))
+                            if amount > 0:
+                                ingredients.append(f'{arg.title()} x{amount}')
+                            else:
+                                ingredients.append(f'{arg.title()}')
+                            idx += 1
+                        elif arg.startswith('Tool'):
+                            tools.append(arg.split('=', maxsplit=1)[1].strip())
+                        elif arg.startswith('input'):
+                            parse_args(WTP.parse(arg.split('=', maxsplit=1)[1].strip()).templates[0].arguments)
+                        idx += 1
+                parse_args(args)
+                ingredients = '• '+'\n• '.join(ingredients)
+                tools = '• '+'\n• '.join(tools) if tools else ''
+                content = f'To craft {item}, you need:\n{ingredients}'
+                if tools:
+                    content = f'{content}\nAnd these tools:\n{tools}'
+                await msg.channel.send(**{
+                    'content': content,
+                    'reference': msg.to_reference(),
+                    'mention_author': True,
+                    })
+                return
+
     async def help(self, msg, intro=None):
         if intro is not None:
             intro = f'{intro.strip()} '
         else:
             intro = ''
         content = f'{intro}I understand the following commands (tag me at the start of the message):\n'
-        for command, (args, desc) in Controller.commands.items():
+        for command, (args, desc, enabled) in Controller.commands.items():
+            if not enabled:
+                continue
             if args:
                 args = f' {args.strip()}'
             if desc:
