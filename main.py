@@ -113,9 +113,9 @@ class MapController:
                             min(144, int(bottom//32))+256),
                            fill=fill_color,
                            outline=outline_color,
-                           width=2)
-            draw.line((0, 256, max(0, int(left//32)), min(144, int(bottom//32))+256), (255, 255, 0, 96), 2)
-            draw.line((256, 256, min(256, int(right//32)), min(144, int(bottom//32))+256), (255, 255, 0, 96), 2)
+                           width=1)
+            draw.line((0, 256, max(0, int(left//32)), min(144, int(bottom//32))+256), (255, 255, 0, 96), 1)
+            draw.line((256, 256, min(256, int(right//32)), min(144, int(bottom//32))+256), (255, 255, 0, 96), 1)
             result = Image.alpha_composite(result, overlay)
         else:
             result = snapshot
@@ -248,7 +248,6 @@ async def on_message(message):
         logging.info(f'Command: {command}, args: {args}')
         await controller.execute(message, command, args)
     elif intent == Intent.MAP:
-        add_wait_emoji = run(message.add_reaction('\U000023F3')) # hourglass emoji
         matches = re.finditer(MapController.MAP_REGEX, message.content)
         for idx, match in enumerate(matches):
             map_controller = MapController.from_match(match)
@@ -270,8 +269,6 @@ async def on_message(message):
                 'mention_author': True,
                 })
         run(message.add_reaction('\U0001F5FA')) # map emoji
-        await add_wait_emoji
-        run(message.remove_reaction('\U000023F3', client.user))
     # elif intent == Intent.NONE and client.user.id in message.raw_mentions:
     #     await controller.help(message, 'I see you are calling me.')
 
