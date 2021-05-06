@@ -136,6 +136,7 @@ class MapController:
         return output
 
     def get_id(self):
+        """Get the id of this map controller"""
         if self.mlat:
             return f'm{-self.mlat}_{self.mlng}'
         else:
@@ -143,6 +144,7 @@ class MapController:
 
     @staticmethod
     def from_match(match):
+        """Create an instance of a map controller based on the regex match object"""
         clat = float(match.group(1))
         clng = float(match.group(2))
         if match.group(3):
@@ -155,6 +157,10 @@ class MapController:
 
     @classmethod
     def get_world_image(cls):
+        """Returns the world map image
+
+        This method caches the result the first time it is called.
+        """
         if cls.map_image is None:
             with open(str(Path(RES_PATH, cls.map_path)), 'rb') as infile:
                 cls.map_image = Image.open(infile).convert('RGBA')
@@ -162,6 +168,10 @@ class MapController:
 
     @classmethod
     def get_marker_image(cls):
+        """Returns the marker image
+
+        This method caches the result the first time it is called.
+        """
         if cls.marker_image is None:
             with open(str(Path(RES_PATH, cls.marker_path)), 'rb') as infile:
                 cls.marker_image = Image.open(infile).convert('RGBA').resize((32, 32))
@@ -377,8 +387,10 @@ class Controller:
                     k = k.strip()
                     v = v.strip()
                     if k.lower() in ['title1', 'name']:
+                        # Set this as the item name
                         title = v
                     elif k.lower() in ['image1', 'image'] or not v:
+                        # Skip images and empty values
                         continue
                     else:
                         entries[k] = v.replace('\n\n', '\n').replace('\n', '\n\t')
@@ -386,7 +398,7 @@ class Controller:
                 entries = '• '+'\n• '.join(entries)
                 content = f'## **{title}** ##\n{template.name.strip()}\n{entries}'
                 contents.append(content)
-        logging.info(', '.join(template_names))
+        logging.info(f'Templates at {item}: '+', '.join(template_names))
         await msg.channel.send(**{
             'content': '\n===\n'.join(contents),
             'reference': msg.to_reference(),
@@ -419,7 +431,7 @@ class Controller:
             'mention_author': True,
             })
 
-    async def help(self, msg, intro=None):
+    async def help(self, msg, args, intro=None):
         """Replies the user with the help message
         """
         if intro is not None:
@@ -447,7 +459,7 @@ class Controller:
     async def not_found(self, msg, command):
         """Replies the user with the help message, prepended with the information about invalid command
         """
-        await self.help(msg, f'I do not understand `{command}`.')
+        await self.help(msg, intro=f'I do not understand `{command}`.')
 
     ### Below are private functions
 
@@ -516,7 +528,7 @@ async def on_message(message):
                 })
         run(message.add_reaction('\U0001F5FA')) # map emoji
     # elif intent == Intent.NONE and client.user.id in message.raw_mentions:
-    #     await controller.help(message, 'I see you are calling me.')
+    #     await controller.help(message, intro='I see you are calling me.')
 
 def main(args=None):
     parser = ArgumentParser(description='')
