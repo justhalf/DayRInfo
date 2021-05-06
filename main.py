@@ -21,12 +21,15 @@ import wikitextparser as WTP
 import requests
 import json
 from functools import lru_cache
+import time
 
 logging.basicConfig(level=logging.INFO)
 
 CLIENT_ID = '839181905249304606'
 PUBLIC_KEY = '8e3a6e541e5954298dc0087903037ef6d7c5480d599f2ae8c25d796af4e6ac25'
 TOKEN = None
+
+NS_IN_S = 1_000_000_000
 
 # The max number of items to cache
 WIKI_CACHE_LIMIT = 50
@@ -173,12 +176,12 @@ async def on_ready():
 class Controller:
     # The list of supported commands, mapped to its description
     commands = {
-            'help': ('', '\U00002753 Show this help', True),
-            'recipe': ('itemName', '\U0001F4DC Show the recipe for the specified item', True),
-            'info': ('itemName', '\U0001F50D Show the infobox for the specified item', True),
-            'snapshot': ('("world") lat lng (zoom)', '\U0001F4F8 Show a snapshot of the map at the specified location and zoom.\n\tIf "world" is specified (without quotes) the world map is also shown', True),
-            'echo': ('text', '\U0001F524 Return back your text', False),
-            'clear_cache': ('', '\U0001F9F9 Clear the cache', False),
+            'help': ('', '\U00002753 Show this help', True, 0),
+            'recipe': ('itemName', '\U0001F4DC Show the recipe for the specified item', True, 10),
+            'info': ('itemName', '\U0001F50D Show the infobox for the specified item', True, 10),
+            'snapshot': ('("world") lat lng (zoom)', '\U0001F4F8 Show a snapshot of the map at the specified location and zoom.\n\tIf "world" is specified (without quotes) the world map is also shown', True, 60),
+            'echo': ('text', '\U0001F524 Return back your text', False, 0),
+            'clear_cache': ('', '\U0001F9F9 Clear the cache', False, 0),
             }
 
     # The regex to detect messages starting with a mention to this bot
@@ -213,7 +216,29 @@ class Controller:
     def __init__(self):
         """Defines a controller for direct command to the bot
         """
-        pass
+        # For each user and command, specifies the time the user is able to use that command
+        self.user_limit = {}
+        for command, (_, _, _, delay) in Controller.commands.items():
+            if delay == 0:
+                # Not rate-limited
+                continue
+            self.user_limit[command] = {}
+            self.user_limit[command]['delay'] = delay
+
+    def is_trusted(self, author):
+        """Returns whether the author is a trusted user
+        """
+        if author.id == None or 'Verification Tier Level 2' in [role.name for role in author.roles]:
+            return True
+        return False
+
+    def can_execute(self, msg, command, now):
+        """Returns whether the author of the message is allowed to run the command
+        """
+        if command not in self.user_limit:
+            return True
+        expiry = self.user_limit[command].get(msg.author.id, 0)
+        return now > expiry, expiry-now
 
     @lru_cache(maxsize=WIKI_CACHE_LIMIT)
     def get_wikitext(self, item):
@@ -251,7 +276,23 @@ class Controller:
         if not sudo and not Controller.is_enabled(command):
             await self.not_found(msg, command)
             return
-        await self.__getattribute__(command)(msg, args)
+        now = time.time_ns()
+        can_execute, delay = self.can_execute(msg, command, now)
+        if can_execute:
+            if self.is_trusted(msg.author):
+                delay = 5 * NS_IN_S
+            else:
+                delay = self.user_limit[command]['delay'] * NS_IN_S
+            self.user_limit[command][msg.author.id] = now + delay
+            await self.__getattribute__(command)(msg, args)
+        else:
+            await msg.channel.send(**{
+                'content': f'You can only use this command in {delay // NS_IN_S} more seconds',
+                'reference': msg.to_reference(),
+                'mention_author': True,
+                'delete_after': 3,
+                })
+            
 
     async def recipe(self, msg, item):
         """Replies the user with the crafting recipe of the given item
