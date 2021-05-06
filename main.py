@@ -279,11 +279,12 @@ class Controller:
         now = time.time_ns()
         can_execute, delay = self.can_execute(msg, command, now)
         if can_execute:
-            if self.is_trusted(msg.author):
-                delay = 5 * NS_IN_S
-            else:
-                delay = self.user_limit[command]['delay'] * NS_IN_S
-            self.user_limit[command][msg.author.id] = now + delay
+            if command in self.user_limit:
+                if self.is_trusted(msg.author):
+                    delay = 5 * NS_IN_S
+                else:
+                    delay = self.user_limit[command]['delay'] * NS_IN_S
+                self.user_limit[command][msg.author.id] = now + delay
             await self.__getattribute__(command)(msg, args)
         else:
             await msg.channel.send(**{
