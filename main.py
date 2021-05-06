@@ -170,10 +170,10 @@ class Controller:
     commands = {
             'help': ('', '\U00002753 Show this help', True),
             'echo': ('text', '\U0001F524 Return back your text', False),
-            'recipe': ('itemName', '\U0001F4DC Return the recipe for the specified item', True),
+            'recipe': ('itemName', '\U0001F4DC Show the recipe for the specified item', True),
             }
 
-    KEY_REGEX = f'^(<@!?{CLIENT_ID}>).*$'
+    KEY_REGEX = f'^(<@[!&]?{CLIENT_ID}>).*$'
 
     WIKI_API_URL = 'https://dayr.fandom.com/api.php?action=query&prop=revisions&rvprop=content&format=json&rvslots=main&titles='
 
