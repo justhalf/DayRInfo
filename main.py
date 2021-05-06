@@ -20,12 +20,16 @@ from asyncio import create_task as run
 import wikitextparser as WTP
 import requests
 import json
+from functools import lru_cache
 
 logging.basicConfig(level=logging.INFO)
 
 CLIENT_ID = '839181905249304606'
 PUBLIC_KEY = '8e3a6e541e5954298dc0087903037ef6d7c5480d599f2ae8c25d796af4e6ac25'
 TOKEN = None
+
+# The max number of items to cache
+WIKI_CACHE_LIMIT = 50
 
 class Intent:
     DIRECT = 'Direct'
@@ -167,15 +171,19 @@ async def on_ready():
     print(f'We have logged in as {client.user}')
 
 class Controller:
-    """The list of supported commands, mapped to its description"""
+    # The list of supported commands, mapped to its description
     commands = {
             'help': ('', '\U00002753 Show this help', True),
-            'echo': ('text', '\U0001F524 Return back your text', False),
             'recipe': ('itemName', '\U0001F4DC Show the recipe for the specified item', True),
+            'info': ('itemName', '\U0001F50D Show the infobox for the specified item', True),
+            'echo': ('text', '\U0001F524 Return back your text', False),
+            'clear_cache': ('', '\U0001F9F9 Clear the cache', False),
             }
 
+    # The regex to detect messages starting with a mention to this bot
     KEY_REGEX = f'^(<@[!&]?{CLIENT_ID}>).*$'
 
+    # The URL to wiki API
     WIKI_API_URL = 'https://dayr.fandom.com/api.php?action=query&prop=revisions&rvprop=content&format=json&rvslots=main&titles='
 
     @staticmethod
@@ -196,43 +204,61 @@ class Controller:
 
     @staticmethod
     def is_enabled(command):
+        """Returns True if the command exists and is enabled"""
         if command not in Controller.commands:
             return False
         return Controller.commands[command][2]
 
     def __init__(self):
+        """Defines a controller for direct command to the bot
+        """
         pass
 
-    async def execute(self, msg, command, args):
-        if not Controller.is_enabled(command):
-            await self.not_found(msg, command)
-            return
-        await self.__getattribute__(command)(msg, args)
+    @lru_cache(maxsize=WIKI_CACHE_LIMIT)
+    def get_wikitext(self, item):
+        """Returns the wikitext of the specified item.
 
-    async def echo(self, msg, args):
-        await msg.channel.send(**{
-            'content': args,
-            'reference': msg.to_reference(),
-            'mention_author': True,
-            })
-
-    async def recipe(self, msg, args):
-        item = args.strip()
+        This method handles redirects as well.
+        """
+        item = item.strip()
         url = Controller.WIKI_API_URL + item
         response = requests.get(url).text
         try:
             pages = json.loads(response)['query']['pages']
             key = list(pages.keys())[0]
+            if key == '-1':
+                raise ValueError('Page not found')
             wikitext = pages[key]['revisions'][0]['slots']['main']['*']
-            if wikitext.startswith('#REDIRECT'):
+            while wikitext.startswith('#REDIRECT'):
                 item = wikitext.split(' ', maxsplit=1)[1][2:-2]
                 url = Controller.WIKI_API_URL + item
                 response = requests.get(url).text
                 pages = json.loads(response)['query']['pages']
                 key = list(pages.keys())[0]
                 wikitext = pages[key]['revisions'][0]['slots']['main']['*']
+            return wikitext
+        except ValueError as e:
+            raise
         except Exception as e:
+            logging.info(response)
             logging.error(e)
+            return None
+
+    async def execute(self, msg, command, args, sudo=False):
+        """Entry point for any direct command
+        """
+        if not sudo and not Controller.is_enabled(command):
+            await self.not_found(msg, command)
+            return
+        await self.__getattribute__(command)(msg, args)
+
+    async def recipe(self, msg, item):
+        """Replies the user with the crafting recipe of the given item
+        """
+        try:
+            wikitext = self.get_wikitext(item)
+        except ValueError as e:
+            # Means the page is not found
             return
         for template in WTP.parse(wikitext).templates:
             if template.name == 'Recipe':
@@ -274,7 +300,59 @@ class Controller:
                     })
                 return
 
+    def is_infobox(self, name):
+        """Returns True if the template name is a type of infobox
+        """
+        if name.lower().startswith('infobox'):
+            return True
+        if name == 'Armors_(NEW)':
+            return True
+        if name == 'All_inclusive_infobox_2020':
+            return True
+        if name == 'Item':
+            return True
+        return False
+
+    async def info(self, msg, item):
+        """Replies the user with the information from infobox of the specified item
+        """
+        try:
+            wikitext = self.get_wikitext(item)
+        except ValueError as e:
+            # Means the page is not found
+            return
+        contents = []
+        template_names = []
+        for template in WTP.parse(wikitext).templates:
+            template_names.append(template.name)
+            if self.is_infobox(template.name):
+                args = template.arguments
+                title = item
+                entries = {}
+                for arg in args:
+                    k, v = arg.string.strip(' |\n').split('=')
+                    k = k.strip()
+                    v = v.strip()
+                    if k.lower() in ['title1', 'name']:
+                        title = v
+                    elif k.lower() in ['image1', 'image'] or not v:
+                        continue
+                    else:
+                        entries[k] = v.replace('\n\n', '\n').replace('\n', '\n\t')
+                entries = [f'{k} = {v}' for k, v in entries.items()]
+                entries = '• '+'\n• '.join(entries)
+                content = f'## **{title}** ##\n{template.name.strip()}\n{entries}'
+                contents.append(content)
+        logging.info(', '.join(template_names))
+        await msg.channel.send(**{
+            'content': '\n===\n'.join(contents),
+            'reference': msg.to_reference(),
+            'mention_author': True,
+            })
+
     async def help(self, msg, intro=None):
+        """Replies the user with the help message
+        """
         if intro is not None:
             intro = f'{intro.strip()} '
         else:
@@ -297,7 +375,28 @@ class Controller:
             })
 
     async def not_found(self, msg, command):
+        """Replies the user with the help message, prepended with the information about invalid command
+        """
         await self.help(msg, f'I do not understand `{command}`.')
+
+    ### Below are private functions
+
+    async def echo(self, msg, args):
+        """Replies the user with their own message
+        """
+        await msg.channel.send(**{
+            'content': args,
+            'reference': msg.to_reference(),
+            'mention_author': True,
+            })
+
+    async def clear_cache(self, msg, args):
+        """Clears the cache
+        """
+        self.get_wikitext.cache_clear()
+        await msg.channel.send(**{
+            'content': 'Cache cleared',
+            })
 
 controller = Controller()
 
@@ -311,6 +410,11 @@ async def on_message(message):
     if message.author == client.user:
         # If this is our own (the bot's) message, ignore it
         return
+    if message.author.id == None and message.channel.type == discord.ChannelType.private:
+        # Give the bot creator access to more commands
+        sudo = True
+    else:
+        sudo = False
 
     logging.info(f'Received message: {message.content} from {message.author} at {message.created_at}')
     intent = get_intent(message)
@@ -318,7 +422,7 @@ async def on_message(message):
     if intent == Intent.DIRECT:
         command, args = controller.get_args(message)
         logging.info(f'Command: {command}, args: {args}')
-        await controller.execute(message, command, args)
+        await controller.execute(message, command, args, sudo)
     elif intent == Intent.MAP:
         matches = re.finditer(MapController.MAP_REGEX, message.content)
         for idx, match in enumerate(matches):
