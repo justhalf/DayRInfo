@@ -236,7 +236,7 @@ class Controller:
         """Returns whether the author of the message is allowed to run the command
         """
         if command not in self.user_limit:
-            return True
+            return True, 0
         expiry = self.user_limit[command].get(msg.author.id, 0)
         return now > expiry, expiry-now
 
