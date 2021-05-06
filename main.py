@@ -176,6 +176,7 @@ class Controller:
             'help': ('', '\U00002753 Show this help', True),
             'recipe': ('itemName', '\U0001F4DC Show the recipe for the specified item', True),
             'info': ('itemName', '\U0001F50D Show the infobox for the specified item', True),
+            'snapshot': ('("world") lat lng (zoom)', '\U0001F4F8 Show a snapshot of the map at the specified location and zoom.\n\tIf "world" is specified (without quotes) the world map is also shown', True),
             'echo': ('text', '\U0001F524 Return back your text', False),
             'clear_cache': ('', '\U0001F9F9 Clear the cache', False),
             }
@@ -350,6 +351,32 @@ class Controller:
             'mention_author': True,
             })
 
+    async def snapshot(self, msg, args):
+        """Replies the user with a snapshot of the specified location
+        """
+        args = args.split()
+        if args[0] == 'world':
+            include_world = True
+            args.pop(0)
+        else:
+            include_world = False
+        if len(args) == 2:
+            lat, lng = map(float, args)
+            zoom = 0
+        elif len(args) == 3:
+            lat, lng, zoom = map(float, args)
+        map_controller = MapController(lat, lng, zoom)
+        image = map_controller.generate_snapshot(include_world=include_world)
+        snapshot_id = map_controller.get_id().replace('_', ', ')
+        location_str = f'center at -{snapshot_id}'
+        content = f'Here is a snapshot of that location ({location_str}).'
+        await msg.channel.send(**{
+            'content': content,
+            'file': discord.File(image, filename=f'snapshot_{map_controller.get_id()}.png'),
+            'reference': msg.to_reference(),
+            'mention_author': True,
+            })
+
     async def help(self, msg, intro=None):
         """Replies the user with the help message
         """
@@ -366,6 +393,7 @@ class Controller:
             if desc:
                 desc = f'\n\t{desc}'
             content = f'{content}`@DayRInfo {command}{args}`{desc}\n'
+        content = f'{content}----------\n'
         content = f'{content}• Also, if you tag me on a message containing a link to the interactive Day R map \U0001F5FA with a location URL, I will send you a snapshot of the location.\n'
         content = f'{content}• React with \U0000274C to any of my messages to delete it (if I still remember that it was my message)'
         await msg.channel.send(**{
