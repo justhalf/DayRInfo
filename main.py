@@ -427,7 +427,7 @@ class Controller:
         else:
             intro = ''
         content = f'{intro}I understand the following commands (tag me at the start of the message):\n'
-        for command, (args, desc, enabled) in Controller.commands.items():
+        for command, (args, desc, enabled, delay) in Controller.commands.items():
             if not enabled:
                 continue
             if args:
