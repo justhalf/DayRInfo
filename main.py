@@ -24,24 +24,27 @@ CLIENT_ID = '839181905249304606'
 PUBLIC_KEY = '8e3a6e541e5954298dc0087903037ef6d7c5480d599f2ae8c25d796af4e6ac25'
 TOKEN = None
 
-RES_PATH = 'res'
-
-class Scope:
+class Intent:
     DIRECT = 'Direct'
     MAP = 'Map'
     NONE = 'None'
 
-MAP_REGEX = 'https://dayr-map.info/(?:index\.html)?\?(?:start\=true&)?clat\=([-0-9.]+)&clng\=([-0-9.]+)(?:&mlat\=([-0-9.]+)&mlng\=([-0-9.]+))?&zoom\=([-0-9.]+)'
-
-def get_scope(msg):
-    if re.match(f'^<@!?{CLIENT_ID}>.*$', msg):
-        return Scope.DIRECT
-    elif re.search(MAP_REGEX, msg):
-        return Scope.MAP
+def get_intent(msg):
+    """Returns the intent of the message, as defined by the Intent class
+    """
+    if re.search(MapController.MAP_REGEX, msg.content) and client.user.id in msg.raw_mentions:
+        return Intent.MAP
+    elif re.match(Controller.KEY_REGEX, msg.content):
+        return Intent.DIRECT
     else:
-        return Scope.NONE
+        return Intent.NONE
 
-class MapData:
+RES_PATH = 'res'
+
+class MapController:
+    """The regex recognizing URL to the interactive Day R map"""
+    MAP_REGEX = 'https://dayr-map.info/(?:index\.html)?\?(?:start\=true&)?clat\=([-0-9.]+)&clng\=([-0-9.]+)(?:&mlat\=([-0-9.]+)&mlng\=([-0-9.]+))?&zoom\=([-0-9.]+)'
+
     """Stores the image of the world map"""
     map_image = None
     map_path = 'world_map_biomes_cities.png'
@@ -50,7 +53,7 @@ class MapData:
     marker_image = None
     marker_path = 'marker_event.png'
 
-    """Data structure to store data about 
+    """Controller for messages containing URL to the interactive Day R map
     """
     def __init__(self, clat, clng, zoom, mlat=None, mlng=None):
         self.clat = clat
@@ -75,7 +78,7 @@ class MapData:
         else:
             y, x = -self.clat, self.clng
         zoom = self.zoom
-        world = MapData.get_world_image()
+        world = MapController.get_world_image()
         top, bottom = y - 256/(2**zoom), y + 256/(2**zoom)
         left, right = x - 256/(2**zoom), x + 256/(2**zoom)
         logging.info(f'Cropping world at {left} {top} {right} {bottom}')
@@ -86,20 +89,33 @@ class MapData:
             snapshot = snapshot.resize((256, 256), resample=Image.BILINEAR)
 
         if self.has_marker:
-            marker = MapData.get_marker_image()
+            marker = MapController.get_marker_image()
             snapshot.paste(marker, (112, 96), marker.getchannel('A'))
 
         if include_world:
+            # Expand the canvas and put the world map under the inset
             result = Image.new('RGBA', (256, 400))
             result.paste(snapshot)
             result.paste(world.resize((256, 144)), (0, 256))
+
+            # Draw a marker at the same place at the world map
             if self.has_marker:
                 result.paste(marker, (int(x//32)-16, int(y//32)-32+256), marker.getchannel('A'))
+
+            # Draw an overlay indicating the inset on the world map
             overlay = Image.new('RGBA', (256, 400))
             draw = ImageDraw.Draw(overlay)
             fill_color = (255, 255, 0, 64) # Transparent yellow
             outline_color = (255, 255, 0, 96) # More solid yellow
-            draw.rectangle((max(0, int(left//32)), max(0, int(top//32))+256, min(256, int(right//32)), min(144, int(bottom//32))+256), fill_color, outline_color, 2)
+            draw.rectangle((max(0, int(left//32)),
+                            max(0, int(top//32))+256,
+                            min(256, int(right//32)),
+                            min(144, int(bottom//32))+256),
+                           fill=fill_color,
+                           outline=outline_color,
+                           width=2)
+            draw.line((0, 256, max(0, int(left//32)), min(144, int(bottom//32))+256), (255, 255, 0, 96), 2)
+            draw.line((256, 256, min(256, int(right//32)), min(144, int(bottom//32))+256), (255, 255, 0, 96), 2)
             result = Image.alpha_composite(result, overlay)
         else:
             result = snapshot
@@ -125,7 +141,7 @@ class MapData:
         else:
             mlat = mlng = None
         zoom = float(match.group(5))
-        return MapData(clat, clng, zoom, mlat, mlng)
+        return MapController(clat, clng, zoom, mlat, mlng)
 
     @classmethod
     def get_world_image(cls):
@@ -147,45 +163,117 @@ client = discord.Client()
 async def on_ready():
     print(f'We have logged in as {client.user}')
 
+class Controller:
+    """The list of supported commands, mapped to its description"""
+    commands = {
+            'help': ('', '\U00002753 Show this help'),
+            'echo': ('text', '\U0001F524 Return back your text'),
+            }
+
+    KEY_REGEX = f'^(<@!?{CLIENT_ID}>).*$'
+
+    @staticmethod
+    def get_args(msg):
+        """Parse the message which has been determined to have DIRECT intent
+        """
+        match = re.match(Controller.KEY_REGEX, msg.content)
+        full_command = msg.content[match.end(1):].strip().split(' ', maxsplit=1)
+        if len(full_command) == 1:
+            command = full_command[0]
+            if not command:
+                command = 'help'
+            args = None
+        else:
+            command = full_command[0]
+            args = full_command[1]
+        return command, args
+
+    def __init__(self):
+        pass
+
+    async def execute(self, msg, command, args):
+        if command not in Controller.commands:
+            await self.not_found(msg, command)
+            return
+        await self.__getattribute__(command)(msg, args)
+
+    async def echo(self, msg, args):
+        await msg.channel.send(**{
+            'content': args,
+            'reference': msg.to_reference(),
+            'mention_author': True,
+            })
+
+    async def help(self, msg, intro=None):
+        if intro is not None:
+            intro = f'{intro.strip()} '
+        else:
+            intro = ''
+        content = f'{intro}I understand the following commands (tag me at the start of the message):\n'
+        for command, (args, desc) in Controller.commands.items():
+            if args:
+                args = f' {args.strip()}'
+            if desc:
+                desc = f'\n\t{desc}'
+            content = f'{content}`@DayRInfo {command}{args}`{desc}\n'
+        content = f'{content}• Also, if you tag me on a message containing a link to the interactive Day R map \U0001F5FA with a location URL, I will send you a snapshot of the location.\n'
+        content = f'{content}• React with \U0000274C to any of my messages to delete it (if I still remember that it was my message)'
+        await msg.channel.send(**{
+            'content': content,
+            'reference': msg.to_reference(),
+            'mention_author': True,
+            })
+
+    async def not_found(self, msg, command):
+        await self.help(msg, f'I do not understand `{command}`.')
+
+controller = Controller()
+
+@client.event
+async def on_reaction_add(reaction, user):
+    if reaction.message.author == client.user and reaction.message.reference.cached_message.author == user and reaction.emoji == '\U0000274C':
+        await reaction.message.delete()
+
 @client.event
 async def on_message(message):
     if message.author == client.user:
+        # If this is our own (the bot's) message, ignore it
         return
 
     logging.info(f'Received message: {message.content} from {message.author} at {message.created_at}')
-    scope = get_scope(message.content)
-    logging.info(f'Scope: {scope}')
-    if scope == Scope.DIRECT:
-        await message.add_reaction('\U0001f44c')
-        await message.channel.send(**{
-            'content': 'Hey there! I exist!',
-            'reference': message.to_reference(),
-            'mention_author': True,
-            })
-    elif scope == Scope.MAP:
-        add_map_emoji = run(message.add_reaction('\U0001F5FA'))
-        add_wait_emoji = run(message.add_reaction('\U000023F3'))
-        matches = re.finditer(MAP_REGEX, message.content)
+    intent = get_intent(message)
+    logging.info(f'Intent: {intent}')
+    if intent == Intent.DIRECT:
+        command, args = controller.get_args(message)
+        logging.info(f'Command: {command}, args: {args}')
+        await controller.execute(message, command, args)
+    elif intent == Intent.MAP:
+        add_wait_emoji = run(message.add_reaction('\U000023F3')) # hourglass emoji
+        matches = re.finditer(MapController.MAP_REGEX, message.content)
         for idx, match in enumerate(matches):
-            map_data = MapData.from_match(match)
-            logging.info(f'Generating image for {map_data}')
-            image = map_data.generate_snapshot()
-            snapshot_id = map_data.get_id().replace('_', ', ')
+            map_controller = MapController.from_match(match)
+            logging.info(f'Generating image for {map_controller}')
+            image = map_controller.generate_snapshot()
+            snapshot_id = map_controller.get_id().replace('_', ', ')
             if snapshot_id[0] == 'm':
                 location_str = f'marker at -{snapshot_id[1:]}'
             else:
                 location_str = f'center at -{snapshot_id}'
             if idx == 0:
-                content = f'I see that you are posting a link to the interactive map. Here is a snapshot of that location ({location_str}).'
+                content = f'Here is a snapshot of that location ({location_str}).'
             else:
                 content = ''
             await message.channel.send(**{
                 'content': content,
-                'file': discord.File(image, filename=f'snapshot_{map_data.get_id()}.png'),
+                'file': discord.File(image, filename=f'snapshot_{map_controller.get_id()}.png'),
+                'reference': message.to_reference(),
+                'mention_author': True,
                 })
+        run(message.add_reaction('\U0001F5FA')) # map emoji
         await add_wait_emoji
         run(message.remove_reaction('\U000023F3', client.user))
-        await add_map_emoji
+    # elif intent == Intent.NONE and client.user.id in message.raw_mentions:
+    #     await controller.help(message, 'I see you are calling me.')
 
 def main(args=None):
     parser = ArgumentParser(description='')
