@@ -431,7 +431,7 @@ class Controller:
             'mention_author': True,
             })
 
-    async def help(self, msg, args, intro=None):
+    async def help(self, msg, args=None, intro=None):
         """Replies the user with the help message
         """
         if intro is not None:
