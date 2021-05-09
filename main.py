@@ -20,8 +20,9 @@ from asyncio import create_task as run
 import wikitextparser as WTP
 import requests
 import json
-from functools import lru_cache
+from functools import lru_cache, wraps
 import time
+from datetime import datetime
 
 logging.basicConfig(level=logging.INFO)
 
@@ -33,6 +34,20 @@ NS_IN_S = 1_000_000_000
 
 # The max number of items to cache
 WIKI_CACHE_LIMIT = 50
+
+def privileged(f):
+    """Decorate a function as requiring sudo access
+    """
+    @wraps(f)
+    def wrapper(self, msg, *args, **kwargs):
+        if not allow_sudo(msg):
+            return
+        return f(self, msg, *args, **kwargs)
+    return wrapper
+
+def allow_sudo(message):
+    """Returns whether in the circumstances of the given message, a sudo action is allowed"""
+    return message.author.id == None and message.channel.type == discord.ChannelType.private
 
 class Intent:
     DIRECT = 'Direct'
@@ -187,18 +202,21 @@ class Controller:
     # The list of supported commands, mapped to its description
     commands = {
             'help': ('', '\U00002753 Show this help', True, 0),
+            'link': ('itemName', '\U0001F517 Show the wikilink for the specified item', True, 10),
             'recipe': ('itemName', '\U0001F4DC Show the recipe for the specified item', True, 10),
             'info': ('itemName', '\U0001F50D Show the infobox for the specified item', True, 10),
             'snapshot': ('("world") lat lng (zoom)', '\U0001F4F8 Show a snapshot of the map at the specified location and zoom.\n\tIf "world" is specified (without quotes) the world map is also shown', True, 60),
-            'echo': ('text', '\U0001F524 Return back your text', False, 0),
-            'clear_cache': ('', '\U0001F9F9 Clear the cache', False, 0),
+            'echo': ('text', '\U0001F524 Return back your text', False, 3),
+            'clear_cache': ('', '\U0001F9F9 Clear the cache', False, 3),
+            'status': ('', '\U00002139 Show the status of the bot', False, 3),
             }
 
     # The regex to detect messages starting with a mention to this bot
     KEY_REGEX = f'^(<@[!&]?{CLIENT_ID}>).*$'
 
     # The URL to wiki API
-    WIKI_API_URL = 'https://dayr.fandom.com/api.php?action=query&prop=revisions&rvprop=content&format=json&rvslots=main&titles='
+    WIKI_API_REV_URL = 'https://dayr.fandom.com/api.php?action=query&prop=revisions&rvprop=content&format=json&rvslots=main&titles='
+    WIKI_API_SEARCH_URL = 'https://dayr.fandom.com/api.php?action=query&list=search&utf8=&format=json&srlimit=3&srprop=timestamp&srsearch='
 
     @staticmethod
     def get_args(msg):
@@ -234,6 +252,8 @@ class Controller:
                 continue
             self.user_limit[command] = {}
             self.user_limit[command]['delay'] = delay
+        self.start_time = datetime.utcnow()
+        self.reply_count = 0
 
     def is_trusted(self, author):
         """Returns whether the author is a trusted user
@@ -257,7 +277,7 @@ class Controller:
         This method handles redirects as well.
         """
         item = item.strip()
-        url = Controller.WIKI_API_URL + item
+        url = Controller.WIKI_API_REV_URL + item
         response = requests.get(url).text
         try:
             pages = json.loads(response)['query']['pages']
@@ -267,7 +287,7 @@ class Controller:
             wikitext = pages[key]['revisions'][0]['slots']['main']['*']
             while wikitext.startswith('#REDIRECT'):
                 item = wikitext.split(' ', maxsplit=1)[1][2:-2]
-                url = Controller.WIKI_API_URL + item
+                url = Controller.WIKI_API_REV_URL + item
                 response = requests.get(url).text
                 pages = json.loads(response)['query']['pages']
                 key = list(pages.keys())[0]
@@ -296,6 +316,7 @@ class Controller:
                     delay = self.user_limit[command]['delay'] * NS_IN_S
                 self.user_limit[command][msg.author.id] = now + delay
             await self.__getattribute__(command)(msg, args)
+            self.reply_count += 1
         else:
             await msg.channel.send(**{
                 'content': f'You can only use this command in {delay // NS_IN_S} more seconds',
@@ -303,11 +324,41 @@ class Controller:
                 'mention_author': True,
                 'delete_after': 3,
                 })
-            
+
+    async def link(self, msg, item):
+        """Replies the user with the wikilink for the specified item
+        """
+        if not item:
+            return
+        item = item.strip()
+        url = Controller.WIKI_API_SEARCH_URL + item
+        response = requests.get(url).text
+        try:
+            pages = json.loads(response)['query']['search']
+            if len(pages) == 0:
+                await msg.channel.send(**{
+                    'content': f'There are no pages matching `{item}`',
+                    'reference': msg.to_reference(),
+                    'mention_author': True,
+                    'delete_after': 3,
+                    })
+                return
+            page_url = f'https://dayr.fandom.com/wiki/{requests.utils.quote(pages[0]["title"])}'
+            await msg.channel.send(**{
+                'content': page_url,
+                'reference': msg.to_reference(),
+                'mention_author': True,
+                })
+        except Exception as e:
+            logging.info(response)
+            logging.error(e)
+            return None
 
     async def recipe(self, msg, item):
         """Replies the user with the crafting recipe of the given item
         """
+        if not item:
+            return
         try:
             wikitext = self.get_wikitext(item)
         except ValueError as e:
@@ -369,6 +420,8 @@ class Controller:
     async def info(self, msg, item):
         """Replies the user with the information from infobox of the specified item
         """
+        if not item:
+            return
         try:
             wikitext = self.get_wikitext(item)
         except ValueError as e:
@@ -408,6 +461,8 @@ class Controller:
     async def snapshot(self, msg, args):
         """Replies the user with a snapshot of the specified location
         """
+        if not args:
+            return
         args = args.split()
         if args[0] == 'world':
             include_world = True
@@ -434,13 +489,14 @@ class Controller:
     async def help(self, msg, args=None, intro=None):
         """Replies the user with the help message
         """
+        sudo = allow_sudo(msg)
         if intro is not None:
             intro = f'{intro.strip()} '
         else:
             intro = ''
         content = f'{intro}I understand the following commands (tag me at the start of the message):\n'
         for command, (args, desc, enabled, delay) in Controller.commands.items():
-            if not enabled:
+            if not sudo and not enabled:
                 continue
             if args:
                 args = f' {args.strip()}'
@@ -463,21 +519,35 @@ class Controller:
 
     ### Below are private functions
 
+    @privileged
     async def echo(self, msg, args):
         """Replies the user with their own message
         """
+        if args is None:
+            args = ''
         await msg.channel.send(**{
             'content': args,
             'reference': msg.to_reference(),
             'mention_author': True,
             })
 
+    @privileged
     async def clear_cache(self, msg, args):
         """Clears the cache
         """
         self.get_wikitext.cache_clear()
         await msg.channel.send(**{
             'content': 'Cache cleared',
+            })
+
+    @privileged
+    async def status(self, msg, args):
+        """Send some status about the bots
+        """
+        content = f'Start time: {self.start_time}\n'
+        content = f'{content}Reply count: {self.reply_count}'
+        await msg.channel.send(**{
+            'content': content,
             })
 
 controller = Controller()
@@ -492,11 +562,9 @@ async def on_message(message):
     if message.author == client.user:
         # If this is our own (the bot's) message, ignore it
         return
-    if message.author.id == None and message.channel.type == discord.ChannelType.private:
-        # Give the bot creator access to more commands
-        sudo = True
-    else:
-        sudo = False
+
+    # Give the bot creator access to more commands
+    sudo = allow_sudo(message)
 
     logging.info(f'Received message: {message.content} from {message.author} at {message.created_at}')
     intent = get_intent(message)
@@ -527,8 +595,6 @@ async def on_message(message):
                 'mention_author': True,
                 })
         run(message.add_reaction('\U0001F5FA')) # map emoji
-    # elif intent == Intent.NONE and client.user.id in message.raw_mentions:
-    #     await controller.help(message, intro='I see you are calling me.')
 
 def main(args=None):
     parser = ArgumentParser(description='')
