@@ -633,7 +633,7 @@ class Controller:
         """Send some status about the bots
         """
         content = f'Start time: {self.start_time}\n'
-        content = f'{content}Reply count: {self.reply_count}'
+        content = f'{content}Reply count: {self.reply_count}\n'
         content = f'{content}Reply count per command:\n'
         for command, count in self.reply_counts.items():
             content += f'• {command}: {count}'
