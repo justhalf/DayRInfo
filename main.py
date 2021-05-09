@@ -23,6 +23,7 @@ import json
 from functools import lru_cache, wraps
 import time
 from datetime import datetime
+from collections import Counter
 
 logging.basicConfig(level=logging.INFO)
 
@@ -70,6 +71,9 @@ class MapController:
     """The regex recognizing URL to the interactive Day R map"""
     MAP_REGEX = 'https://dayr-map.info/(?:index\.html)?\?(?:start\=true&)?clat\=([-0-9.]+)&clng\=([-0-9.]+)(?:&mlat\=([-0-9.]+)&mlng\=([-0-9.]+))?&zoom\=([-0-9.]+)'
 
+    """The URL to the interactive map"""
+    MAP_URL = 'https://dayr-map.info'
+
     """Stores the image of the world map"""
     map_image = None
     map_path = 'world_map_biomes_cities.png'
@@ -78,14 +82,19 @@ class MapController:
     marker_image = None
     marker_path = 'marker_event.png'
 
+    """Mapping of all location names into their coordinates and size"""
+    locations = {}
+
     """Controller for messages containing URL to the interactive Day R map
     """
-    def __init__(self, clat, clng, zoom, mlat=None, mlng=None):
+    def __init__(self, clat, clng, zoom=0, mlat=None, mlng=None, start=False):
         self.clat = clat
         self.clng = clng
         self.zoom = zoom
         self.mlat = mlat
         self.mlng = mlng
+        self.start = start
+
         self.has_marker = self.mlat is not None
 
     def __repr__(self):
@@ -150,6 +159,19 @@ class MapController:
         output.seek(0)
         return output
 
+    def generate_url(self):
+        """Generate the URL for this location"""
+        if self.has_marker:
+            marker_param = f'mlat={self.mlat}&mlng={self.mlng}&'
+        else:
+            marker_param = ''
+        if self.start:
+            start_param = 'start=true&'
+        else:
+            start_param = ''
+        url = f'{MapController.MAP_URL}?{start_param}clat={self.clat}&clng={self.clng}&{marker_param}zoom={self.zoom}'
+        return url
+
     def get_id(self):
         """Get the id of this map controller"""
         if self.mlat:
@@ -206,6 +228,8 @@ class Controller:
             'recipe': ('itemName', '\U0001F4DC Show the recipe for the specified item', True, 10),
             'info': ('itemName', '\U0001F50D Show the infobox for the specified item', True, 10),
             'snapshot': ('("world") lat lng (zoom)', '\U0001F4F8 Show a snapshot of the map at the specified location and zoom.\n\tIf "world" is specified (without quotes) the world map is also shown', True, 60),
+            'location': ('place_name', '\U0001F4CD Show the location details of the specified place', True, 60),
+            'distance': ('"place1" "place2"', '\U0001F4D0 Calculate the distance between the two places', True, 10),
             'echo': ('text', '\U0001F524 Return back your text', False, 3),
             'clear_cache': ('', '\U0001F9F9 Clear the cache', False, 3),
             'status': ('', '\U00002139 Show the status of the bot', False, 3),
@@ -254,6 +278,7 @@ class Controller:
             self.user_limit[command]['delay'] = delay
         self.start_time = datetime.utcnow()
         self.reply_count = 0
+        self.reply_counts = Counter()
 
     def is_trusted(self, author):
         """Returns whether the author is a trusted user
@@ -317,6 +342,7 @@ class Controller:
                 self.user_limit[command][msg.author.id] = now + delay
             await self.__getattribute__(command)(msg, args)
             self.reply_count += 1
+            self.reply_counts[command] += 1
         else:
             await msg.channel.send(**{
                 'content': f'You can only use this command in {delay // NS_IN_S} more seconds',
@@ -486,6 +512,68 @@ class Controller:
             'mention_author': True,
             })
 
+    async def location(self, msg, place_name):
+        """Replies the user with the coordinates of the given place, as well as the snapshot and the URL
+        """
+        if not place_name:
+            return
+        place_name = place_name.strip(' "\'')
+        if place_name.lower() in MapController.locations:
+            lat, lng, size = MapController.locations[place_name.lower()]
+
+            map_controller = MapController(lat, lng, 0, lat, lng)
+            image = map_controller.generate_snapshot(include_world=True)
+            url = map_controller.generate_url()
+
+            content = f'The location `{place_name}` is located at ({lat:.2f}, {lng:.2f})\nURL: <{url}>'
+            await msg.channel.send(**{
+                'content': content,
+                'file': discord.File(image, filename=f'snapshot_{map_controller.get_id()}.png'),
+                'reference': msg.to_reference(),
+                'mention_author': True,
+                })
+        else:
+            await msg.channel.send(**{
+                'content': f'There is no location named `{place_name}`',
+                'reference': msg.to_reference(),
+                'mention_author': True,
+                'delete_after': 3,
+                })
+
+    async def distance(self, msg, args):
+        """Replies the user with the distance between the two place names mentioned
+        """
+        if not args:
+            return
+        args = args.strip()
+        match = re.match('^("[^"]+"|[^" ]+) ("[^"]+"|[^" ]+)', args)
+        if not match:
+            return
+        place1 = match.group(1).strip('"')
+        place2 = match.group(2).strip('"')
+        try:
+            if place1.lower() not in MapController.locations:
+                raise ValueError(place1)
+            if place2.lower() not in MapController.locations:
+                raise ValueError(place2)
+        except ValueError as e:
+            await msg.channel.send(**{
+                'content': f'There is no location named `{e.args[0]}`',
+                'reference': msg.to_reference(),
+                'mention_author': True,
+                'delete_after': 3,
+                })
+            return
+        lat1, lng1, _ = MapController.locations[place1.lower()]
+        lat2, lng2, _ = MapController.locations[place2.lower()]
+        distance = ((lat1-lat2)**2 + (lng1-lng2)**2)**0.5
+        content = f'The distance between {place1} ({lat1}, {lng1}) and {place2} ({lat2}, {lng2}) is {distance:.0f}km.'
+        await msg.channel.send(**{
+            'content': content,
+            'reference': msg.to_reference(),
+            'mention_author': True,
+            })
+
     async def help(self, msg, args=None, intro=None):
         """Replies the user with the help message
         """
@@ -546,6 +634,9 @@ class Controller:
         """
         content = f'Start time: {self.start_time}\n'
         content = f'{content}Reply count: {self.reply_count}'
+        content = f'{content}Reply count per command:\n'
+        for command, count in self.reply_counts.items():
+            content += f'• {command}: {count}'
         await msg.channel.send(**{
             'content': content,
             })
@@ -600,13 +691,29 @@ def main(args=None):
     parser = ArgumentParser(description='')
     parser.add_argument('--token_path', default='token.txt',
                         help='The path to the token')
+    parser.add_argument('--location_path', default='location_marker.json',
+                        help='The path to list of locations')
     args = parser.parse_args(args)
     token_path = args.token_path
+    location_path = args.location_path
     try:
         with open(token_path, 'r') as infile:
             TOKEN = infile.read().strip()
     except:
         TOKEN = os.environ.get('TOKEN')
+    try:
+        # Map all location names (in all languages) into their lat, lng and size (for name collision handling)
+        with open(location_path, 'r') as infile:
+            location_data = json.load(infile)
+        for location in location_data:
+            lng, lat = location['geometry']['coordinates']
+            size = location['properties']['size']
+            for name in location['properties']['name'].values():
+                name = name.lower()
+                if name not in MapController.locations or size > MapController.locations[name][2]:
+                    MapController.locations[name] = (lat, lng, size)
+    except:
+        logging.info(f'Cannot read location marker data from {location_path}')
     client.run(TOKEN)
 
 if __name__ == '__main__':
