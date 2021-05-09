@@ -343,7 +343,7 @@ class Controller:
                     'delete_after': 3,
                     })
                 return
-            page_url = f'https://dayr.fandom.com/wiki/{requests.utils.quote(pages[0]["title"])}'
+            page_url = f'<https://dayr.fandom.com/wiki/{requests.utils.quote(pages[0]["title"])}>'
             await msg.channel.send(**{
                 'content': page_url,
                 'reference': msg.to_reference(),
