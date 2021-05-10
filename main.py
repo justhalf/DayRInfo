@@ -61,6 +61,7 @@ class Guard:
     BANNED_USERS = set()
 
     AUTHOR = None
+    AUTHOR_DM = None
 
     def __init__(self, state=State.NORMAL):
         """Initializes a guard to check user privilege"""
@@ -826,6 +827,9 @@ class Controller:
             elif sub_command == 'remove':
                 var.remove(int(entityid))
         await msg.add_reaction('🆗')
+        await client.get_channel(AUTHOR_DM).send(**{
+            'content': f'{msg.author}: {command} {args}',
+            })
 
 controller = Controller()
 
