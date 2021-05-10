@@ -159,6 +159,19 @@ class MapController:
         output.seek(0)
         return output
 
+    def is_valid(self, strict=False):
+        if self.clat > 0 or self.clat < -9*512:
+            return False
+        if self.clng < 0 or self.clng > 16*512:
+            return False
+        if self.has_marker and (self.mlat > 0 or self.mlat < -9*512):
+            return False
+        if self.has_marker and (self.mlng < 0 or self.mlng > 16*512):
+            return False
+        if strict and (not (2*self.zoom).is_integer() or self.zoom < -3 or self.zoom > 5):
+            return False
+        return True
+
     def generate_url(self):
         """Generate the URL for this location"""
         if self.has_marker:
@@ -223,16 +236,19 @@ async def on_ready():
 class Controller:
     # The list of supported commands, mapped to its description
     commands = {
-            'help': ('', '\U00002753 Show this help', True, 0),
-            'link': ('itemName', '\U0001F517 Show the wikilink for the specified item', True, 10),
-            'recipe': ('itemName', '\U0001F4DC Show the recipe for the specified item', True, 10),
-            'info': ('itemName', '\U0001F50D Show the infobox for the specified item', True, 10),
-            'snapshot': ('("world") lat lng (zoom)', '\U0001F4F8 Show a snapshot of the map at the specified location and zoom.\n\tIf "world" is specified (without quotes) the world map is also shown', True, 60),
-            'location': ('place_name', '\U0001F4CD Show the location details of the specified place', True, 60),
-            'distance': ('"place1" "place2"', '\U0001F4D0 Calculate the distance between the two places', True, 10),
-            'echo': ('text', '\U0001F524 Return back your text', False, 3),
-            'clear_cache': ('', '\U0001F9F9 Clear the cache', False, 3),
-            'status': ('', '\U00002139 Show the status of the bot', False, 3),
+            'help': ('', '❓ Show this help', True, 0),
+            'link': ('itemName', '🔗 Show the wikilink for the specified item', True, 10),
+            'recipe': ('itemName', '📜 Show the recipe for the specified item', True, 10),
+            'info': ('itemName', '🔍 Show the infobox for the specified item', True, 10),
+            'snapshot': ('("world") ("marker") lat lng (zoom)',
+                ('📸 Show a snapshot of the map at the specified location and zoom.\n'
+                +'\tIf "world" is specified (without quotes) the world map is also shown'
+                +'\tIf "marker" is specified (without quotes) a marker will be shown'), True, 60),
+            'location': ('place_name', '📍 Show the location details of the specified place', True, 60),
+            'distance': ('"place1" "place2"', '📐 Calculate the distance between the two places', True, 10),
+            'echo': ('text', '🔤 Return back your text', False, 3),
+            'clear_cache': ('', '🧹 Clear the cache', False, 3),
+            'status': ('', 'ℹ️ Show the status of the bot', False, 3),
             }
 
     # The regex to detect messages starting with a mention to this bot
@@ -390,8 +406,16 @@ class Controller:
         except ValueError as e:
             # Means the page is not found
             return
-        for template in WTP.parse(wikitext).templates:
-            if template.name == 'Recipe':
+        try:
+            emojis = {emoji.name.lower(): f'<:{emoji.name}:{emoji.id}> ' for emoji in msg.guild.emojis if emoji.available}
+            for k, v in list(emojis.items()):
+                emojis[k+'s'] = v
+        except:
+            emojis = {}
+        parsed = WTP.parse(wikitext)
+        content = None
+        for template in parsed.templates:
+            if template.name.strip() == 'Recipe':
                 args = template.arguments
                 logging.info(args)
                 ingredients = []
@@ -406,9 +430,9 @@ class Controller:
                         if '=' not in arg:
                             amount = int(args[idx+1].string.strip(' |'))
                             if amount > 0:
-                                ingredients.append(f'{arg.capitalize()} x{amount}')
+                                ingredients.append(f'{emojis.get(arg.lower().replace(" ", "_"), "")}{arg.capitalize()} x{amount}')
                             else:
-                                ingredients.append(f'{arg.capitalize()}')
+                                ingredients.append(f'{emojis.get(arg.lower().replace(" ", "_"), "")}{arg.capitalize()}')
                             idx += 1
                         elif arg.startswith('Tool'):
                             tools.append(arg.split('=', maxsplit=1)[1].strip().capitalize())
@@ -423,12 +447,22 @@ class Controller:
                 content = f'To craft {item}, you need:\n{ingredients}'
                 if tools:
                     content = f'{content}\nAnd these tools:\n{tools}'
-                await msg.channel.send(**{
-                    'content': content,
-                    'reference': msg.to_reference(),
-                    'mention_author': True,
-                    })
-                return
+                break
+        for table in parsed.tables:
+            if 'Ingredients' in table:
+                rows = table.string.split('|-')[1:]
+                ingredients = [row.strip(' \t\n|').split('\n')[0].strip(' \t\n|').replace('[[', '').replace(']]', '').split('|')[-1] for row in rows]
+                ingredients = [f'{emojis.get(" ".join(ingredient.split(" ")[:-1]).lower().replace(" ", "_"), "")}{ingredient}' for ingredient in ingredients]
+                ingredients = '• '+'\n• '.join(ingredients)
+                content = f'To cook {item}, you need:\n{ingredients}'
+                break
+        if content is None:
+            return
+        await msg.channel.send(**{
+            'content': content,
+            'reference': msg.to_reference(),
+            'mention_author': True,
+            })
 
     def is_infobox(self, name):
         """Returns True if the template name is a type of infobox
@@ -495,14 +529,35 @@ class Controller:
             args.pop(0)
         else:
             include_world = False
-        if len(args) == 2:
-            lat, lng = map(float, args)
-            zoom = 0
-        elif len(args) == 3:
-            lat, lng, zoom = map(float, args)
-        map_controller = MapController(lat, lng, zoom)
+        if args[0] == 'marker':
+            show_marker = True
+            args.pop(0)
+        else:
+            show_marker = False
+        try:
+            if len(args) == 2:
+                lat, lng = map(float, args)
+                zoom = 0
+            elif len(args) == 3:
+                lat, lng, zoom = map(float, args)
+            else:
+                return
+        except:
+            return
+        if show_marker:
+            map_controller = MapController(lat, lng, zoom, mlat=lat, mlng=lng)
+        else:
+            map_controller = MapController(lat, lng, zoom)
+        if not map_controller.is_valid():
+            await msg.channel.send(**{
+                'content': f'Invalid location {lat} {lng} {zoom}',
+                'reference': msg.to_reference(),
+                'mention_author': True,
+                'delete_after': 3,
+                })
+            return
         image = map_controller.generate_snapshot(include_world=include_world)
-        snapshot_id = map_controller.get_id().replace('_', ', ')
+        snapshot_id = map_controller.get_id().replace('_', ', ').replace('m', '')
         location_str = f'center at -{snapshot_id}'
         content = f'Here is a snapshot of that location ({location_str}).'
         await msg.channel.send(**{
@@ -521,7 +576,7 @@ class Controller:
         if place_name.lower() in MapController.locations:
             lat, lng, size = MapController.locations[place_name.lower()]
 
-            map_controller = MapController(lat, lng, 0, lat, lng)
+            map_controller = MapController(lat, lng, 1, lat, lng)
             image = map_controller.generate_snapshot(include_world=True)
             url = map_controller.generate_url()
 
@@ -592,8 +647,8 @@ class Controller:
                 desc = f'\n\t{desc}'
             content = f'{content}`@DayRInfo {command}{args}`{desc}\n'
         content = f'{content}----------\n'
-        content = f'{content}• Also, if you tag me on a message containing a link to the interactive Day R map \U0001F5FA with a location URL, I will send you a snapshot of the location.\n'
-        content = f'{content}• React with \U0000274C to any of my messages to delete it (if I still remember that it was my message)'
+        content = f'{content}• Also, if you tag me on a message containing a link to the interactive Day R map 🗺️ with a location URL, I will send you a snapshot of the location.\n'
+        content = f'{content}• React with ❌ to any of my messages to delete it (if I still remember that it was my message)'
         await msg.channel.send(**{
             'content': content,
             'reference': msg.to_reference(),
@@ -645,7 +700,7 @@ controller = Controller()
 
 @client.event
 async def on_reaction_add(reaction, user):
-    if reaction.message.author == client.user and reaction.message.reference.cached_message.author == user and reaction.emoji == '\U0000274C':
+    if reaction.message.author == client.user and reaction.message.reference.cached_message.author == user and reaction.emoji == '❌':
         await reaction.message.delete()
 
 @client.event
@@ -685,7 +740,7 @@ async def on_message(message):
                 'reference': message.to_reference(),
                 'mention_author': True,
                 })
-        run(message.add_reaction('\U0001F5FA')) # map emoji
+        run(message.add_reaction('🗺️')) # map emoji
 
 def main(args=None):
     parser = ArgumentParser(description='')
