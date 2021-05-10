@@ -415,7 +415,7 @@ class Controller:
         parsed = WTP.parse(wikitext)
         content = None
         for template in parsed.templates:
-            if template.name.strip() == 'Recipe':
+            if template.name.strip().lower() == 'recipe':
                 args = template.arguments
                 logging.info(args)
                 ingredients = []
