@@ -53,15 +53,15 @@ class State:
         return None
 
 class Guard:
-    TRUSTED_ROLES = set(['Verification Tier Level 2'])
-
-    SUDO_IDS = set()
-    SUDO_CHANNELS = set()
-
-    BANNED_USERS = set()
-
     AUTHOR = None
     AUTHOR_DM = None
+
+    SUDO_IDS = set([Guard.AUTHOR])
+    SUDO_CHANNELS = set()
+
+    TRUSTED_ROLES = set(['Verification Tier Level 2'])
+
+    BANNED_USERS = set()
 
     def __init__(self, state=State.NORMAL):
         """Initializes a guard to check user privilege"""
