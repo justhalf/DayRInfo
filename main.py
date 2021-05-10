@@ -68,6 +68,8 @@ class Guard:
 
     def allow(self, message):
         """Whether to allow the message given the current state of the guard"""
+        if message.author.id == Guard.AUTHOR:
+            return True
         if message.author.id in Guard.BANNED_USERS:
             return False
         if self.state == State.TRUSTED_ONLY and not Guard.is_trusted(message):
@@ -89,10 +91,10 @@ class Guard:
     def is_trusted(message):
         """Returns whether the circumstances of the message, the author is trusted"""
         author = message.author
-        if author.id in Guard.BANNED_USERS:
-            return False
         if author.id == Guard.AUTHOR:
             return True
+        if author.id in Guard.BANNED_USERS:
+            return False
         if set([role.name for role in author.roles]).intersection(Guard.TRUSTED_ROLES):
             return True
         return False
