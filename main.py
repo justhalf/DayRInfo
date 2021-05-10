@@ -828,7 +828,7 @@ class Controller:
                 var.remove(int(entityid))
         await msg.add_reaction('🆗')
         await client.get_channel(Guard.AUTHOR_DM).send(**{
-            'content': f'{msg.author}: {args}',
+            'content': f'{msg.author} ({msg.author.id}): {args}',
             })
 
 controller = Controller()
