@@ -242,7 +242,7 @@ class Controller:
             'info': ('itemName', '🔍 Show the infobox for the specified item', True, 10),
             'snapshot': ('("world") ("marker") lat lng (zoom)',
                 ('📸 Show a snapshot of the map at the specified location and zoom.\n'
-                +'\tIf "world" is specified (without quotes) the world map is also shown'
+                +'\tIf "world" is specified (without quotes) the world map is also shown\n'
                 +'\tIf "marker" is specified (without quotes) a marker will be shown'), True, 60),
             'location': ('place_name', '📍 Show the location details of the specified place', True, 60),
             'distance': ('"place1" "place2"', '📐 Calculate the distance between the two places', True, 10),
