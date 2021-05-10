@@ -56,7 +56,7 @@ class Guard:
     AUTHOR = None
     AUTHOR_DM = None
 
-    SUDO_IDS = set([Guard.AUTHOR])
+    SUDO_IDS = set([None])
     SUDO_CHANNELS = set()
 
     TRUSTED_ROLES = set(['Verification Tier Level 2'])
