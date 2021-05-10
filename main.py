@@ -325,10 +325,11 @@ class Controller:
         full_command = msg.content[match.end(1):].strip()
 
         full_command = re.findall('(?<=")[^"]+(?=")|[^" ]+', full_command)
-        if len(full_command) == 1:
+        if len(full_command) == 0:
+            command = 'help'
+            args = []
+        elif len(full_command) == 1:
             command = full_command[0]
-            if not command:
-                command = 'help'
             args = []
         else:
             command = full_command[0]
