@@ -689,9 +689,9 @@ class Controller:
         """
         content = f'Start time: {self.start_time}\n'
         content = f'{content}Reply count: {self.reply_count}\n'
-        content = f'{content}Reply count per command:\n'
+        content = f'{content}Reply count per command:'
         for command, count in self.reply_counts.items():
-            content += f'• {command}: {count}'
+            content += f'\n• {command}: {count}'
         await msg.channel.send(**{
             'content': content,
             })
