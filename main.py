@@ -58,6 +58,8 @@ class Guard:
     SUDO_IDS = set()
     SUDO_CHANNELS = set()
 
+    BANNED_USERS = set()
+
     AUTHOR = None
 
     def __init__(self, state=State.NORMAL):
@@ -66,6 +68,8 @@ class Guard:
 
     def allow(self, message):
         """Whether to allow the message given the current state of the guard"""
+        if message.author.id in Guard.BANNED_USERS:
+            return False
         if self.state == State.TRUSTED_ONLY and not Guard.is_trusted(message):
             return False
         if self.state == State.SUDO_ONLY and not Guard.allow_sudo(message):
@@ -85,6 +89,8 @@ class Guard:
     def is_trusted(message):
         """Returns whether the circumstances of the message, the author is trusted"""
         author = message.author
+        if author.id in Guard.BANNED_USERS:
+            return False
         if author.id == Guard.AUTHOR:
             return True
         if set([role.name for role in author.roles]).intersection(Guard.TRUSTED_ROLES):
@@ -306,7 +312,7 @@ class Controller:
             'clear_cache': ('', '🧹 Clear the cache', False, 3),
             'status': ('', 'ℹ️ Show the status of the bot', False, 3),
             'restate': ('[Normal|Trusted|Sudo]', '🛠️ Change the state of the bot', False, 3),
-            'manage': ('[add|remove] [TRUSTED_ROLES|SUDO_IDS|SUDO_CHANNELS] ENTITYID (ENTITYID)*',
+            'manage': ('[add|remove] [BANNED_USERSTRUSTED_ROLES|SUDO_IDS|SUDO_CHANNELS] ENTITYID (ENTITYID)*',
                        '🔒 Manage the sudo list and trusted roles', False, 3),
             }
 
@@ -751,6 +757,7 @@ class Controller:
         content = f'{content}SUDO_IDS: {Guard.SUDO_IDS}\n'
         content = f'{content}SUDO_CHANNELS: {Guard.SUDO_CHANNELS}\n'
         content = f'{content}TRUSTED_ROLES: {Guard.TRUSTED_ROLES}\n'
+        content = f'{content}BANNED_USERS: {Guard.BANNED_USERS}\n'
         content = f'{content}Reply count: {self.reply_count}\n'
         content = f'{content}Reply count per command:'
         for command, count in self.reply_counts.items():
@@ -790,7 +797,7 @@ class Controller:
     async def manage(self, msg, *args):
         """Manages the guard of this bot
 
-        Syntax: manage [add | remove] [TRUSTED_ROLES | SUDO_IDS | SUDO_CHANNELS] ENTITYID (ENTITYID)*
+        Syntax: manage [add | remove] [BANNED_USERS | TRUSTED_ROLES | SUDO_IDS | SUDO_CHANNELS] ENTITYID (ENTITYID)*
         """
         if len(args) < 3:
             return
@@ -798,9 +805,11 @@ class Controller:
         if sub_command not in ['add', 'remove']:
             return
         var = args[1]
-        if var not in ['TRUSTED_ROLES', 'SUDO_IDS', 'SUDO_CHANNELS']:
+        if var not in ['BANNED_USERS', 'TRUSTED_ROLES', 'SUDO_IDS', 'SUDO_CHANNELS']:
             return
-        if var == 'TRUSTED_ROLES':
+        if var == 'BANNED_USERS':
+            var = Guard.BANNED_USERS
+        elif var == 'TRUSTED_ROLES':
             var = Guard.TRUSTED_ROLES
         elif var == 'SUDO_IDS':
             var = Guard.SUDO_IDS
