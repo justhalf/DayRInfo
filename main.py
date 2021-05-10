@@ -36,34 +36,88 @@ NS_IN_S = 1_000_000_000
 # The max number of items to cache
 WIKI_CACHE_LIMIT = 50
 
-def privileged(f):
-    """Decorate a function as requiring sudo access
-    """
-    @wraps(f)
-    def wrapper(self, msg, *args, **kwargs):
-        if not allow_sudo(msg):
-            return
-        return f(self, msg, *args, **kwargs)
-    return wrapper
+class State:
+    """Enumeration of Controller states"""
+    NORMAL = 'Normal'
+    TRUSTED_ONLY = 'Trusted'
+    SUDO_ONLY = 'Sudo'
 
-def allow_sudo(message):
-    """Returns whether in the circumstances of the given message, a sudo action is allowed"""
-    return message.author.id == None and message.channel.type == discord.ChannelType.private
+    @staticmethod
+    def get_state(string):
+        if string == State.NORMAL:
+            return State.NORMAL
+        if string == State.TRUSTED_ONLY:
+            return State.TRUSTED_ONLY
+        if string == State.SUDO_ONLY:
+            return State.SUDO_ONLY
+        return None
+
+class Guard:
+    TRUSTED_ROLES = set(['Verification Tier Level 2'])
+
+    SUDO_IDS = set()
+    SUDO_CHANNELS = set()
+
+    AUTHOR = None
+
+    def __init__(self, state=State.NORMAL):
+        """Initializes a guard to check user privilege"""
+        self.state = state
+
+    def allow(self, message):
+        """Whether to allow the message given the current state of the guard"""
+        if self.state == State.TRUSTED_ONLY and not Guard.is_trusted(message):
+            return False
+        if self.state == State.SUDO_ONLY and not Guard.allow_sudo(message):
+            return False
+        return True
+
+    @staticmethod
+    def allow_sudo(message):
+        """Returns whether in the circumstances of the given message, a sudo action is allowed"""
+        if message.author.id == Guard.AUTHOR and message.channel.type == discord.ChannelType.private:
+            return True
+        if message.author.id in Guard.SUDO_IDS and message.channel.id in Guard.SUDO_CHANNELS:
+            return True
+        return False
+
+    @staticmethod
+    def is_trusted(message):
+        """Returns whether the circumstances of the message, the author is trusted"""
+        author = message.author
+        if author.id == Guard.AUTHOR:
+            return True
+        if set([role.name for role in author.roles]).intersection(Guard.TRUSTED_ROLES):
+            return True
+        return False
+
+guard = Guard()
 
 class Intent:
     DIRECT = 'Direct'
     MAP = 'Map'
     NONE = 'None'
 
-def get_intent(msg):
-    """Returns the intent of the message, as defined by the Intent class
+    @staticmethod
+    def get_intent(msg):
+        """Returns the intent of the message, as defined by the Intent class
+        """
+        if re.search(MapController.MAP_REGEX, msg.content) and client.user.id in msg.raw_mentions:
+            return Intent.MAP
+        elif re.match(Controller.KEY_REGEX, msg.content):
+            return Intent.DIRECT
+        else:
+            return Intent.NONE
+
+def privileged(f):
+    """Decorate a function as requiring sudo access
     """
-    if re.search(MapController.MAP_REGEX, msg.content) and client.user.id in msg.raw_mentions:
-        return Intent.MAP
-    elif re.match(Controller.KEY_REGEX, msg.content):
-        return Intent.DIRECT
-    else:
-        return Intent.NONE
+    @wraps(f)
+    def wrapper(self, msg, *args, **kwargs):
+        if not Guard.allow_sudo(msg):
+            return
+        return f(self, msg, *args, **kwargs)
+    return wrapper
 
 RES_PATH = 'res'
 
@@ -246,9 +300,14 @@ class Controller:
                 +'\tIf "marker" is specified (without quotes) a marker will be shown'), True, 60),
             'location': ('place_name', '📍 Show the location details of the specified place', True, 60),
             'distance': ('"place1" "place2"', '📐 Calculate the distance between the two places', True, 10),
+
+            # Privileged commands below
             'echo': ('text', '🔤 Return back your text', False, 3),
             'clear_cache': ('', '🧹 Clear the cache', False, 3),
             'status': ('', 'ℹ️ Show the status of the bot', False, 3),
+            'restate': ('[Normal|Trusted|Sudo]', '🛠️ Change the state of the bot', False, 3),
+            'manage': ('[add|remove] [TRUSTED_ROLES|SUDO_IDS|SUDO_CHANNELS] ENTITYID (ENTITYID)*',
+                       '🔒 Manage the sudo list and trusted roles', False, 3),
             }
 
     # The regex to detect messages starting with a mention to this bot
@@ -263,15 +322,17 @@ class Controller:
         """Parse the message which has been determined to have DIRECT intent
         """
         match = re.match(Controller.KEY_REGEX, msg.content)
-        full_command = msg.content[match.end(1):].strip().split(' ', maxsplit=1)
+        full_command = msg.content[match.end(1):].strip()
+
+        full_command = re.findall('(?<=")[^"]+(?=")|[^" ]+', full_command)
         if len(full_command) == 1:
             command = full_command[0]
             if not command:
                 command = 'help'
-            args = None
+            args = []
         else:
             command = full_command[0]
-            args = full_command[1]
+            args = full_command[1:]
         return command, args
 
     @staticmethod
@@ -295,13 +356,6 @@ class Controller:
         self.start_time = datetime.utcnow()
         self.reply_count = 0
         self.reply_counts = Counter()
-
-    def is_trusted(self, author):
-        """Returns whether the author is a trusted user
-        """
-        if author.id == None or 'Verification Tier Level 2' in [role.name for role in author.roles]:
-            return True
-        return False
 
     def can_execute(self, msg, command, now):
         """Returns whether the author of the message is allowed to run the command
@@ -341,22 +395,22 @@ class Controller:
             logging.error(e)
             return None
 
-    async def execute(self, msg, command, args, sudo=False):
+    async def execute(self, msg, command, args):
         """Entry point for any direct command
         """
-        if not sudo and not Controller.is_enabled(command):
+        if not Guard.allow_sudo(msg) and not Controller.is_enabled(command):
             await self.not_found(msg, command)
             return
         now = time.time_ns()
         can_execute, delay = self.can_execute(msg, command, now)
         if can_execute:
             if command in self.user_limit:
-                if self.is_trusted(msg.author):
+                if Guard.is_trusted(msg):
                     delay = 5 * NS_IN_S
                 else:
                     delay = self.user_limit[command]['delay'] * NS_IN_S
                 self.user_limit[command][msg.author.id] = now + delay
-            await self.__getattribute__(command)(msg, args)
+            await self.__getattribute__(command)(msg, *args)
             self.reply_count += 1
             self.reply_counts[command] += 1
         else:
@@ -367,12 +421,13 @@ class Controller:
                 'delete_after': 3,
                 })
 
-    async def link(self, msg, item):
+    async def link(self, msg, item=None, *args):
         """Replies the user with the wikilink for the specified item
         """
         if not item:
             return
-        item = item.strip()
+        if args:
+            item = f'{item} {" ".join(args)}'
         url = Controller.WIKI_API_SEARCH_URL + item
         response = requests.get(url).text
         try:
@@ -396,11 +451,13 @@ class Controller:
             logging.error(e)
             return None
 
-    async def recipe(self, msg, item):
+    async def recipe(self, msg, item=None, *args):
         """Replies the user with the crafting recipe of the given item
         """
         if not item:
             return
+        if args:
+            item = f'{item} {" ".join(args)}'
         try:
             wikitext = self.get_wikitext(item)
         except ValueError as e:
@@ -477,11 +534,13 @@ class Controller:
             return True
         return False
 
-    async def info(self, msg, item):
+    async def info(self, msg, item=None, *args):
         """Replies the user with the information from infobox of the specified item
         """
         if not item:
             return
+        if args:
+            item = f'{item} {" ".join(args)}'
         try:
             wikitext = self.get_wikitext(item)
         except ValueError as e:
@@ -523,13 +582,12 @@ class Controller:
         """
         if not args:
             return
-        args = args.split()
         if args[0] == 'world':
             include_world = True
             args.pop(0)
         else:
             include_world = False
-        if args[0] == 'marker':
+        if args and args[0] == 'marker':
             show_marker = True
             args.pop(0)
         else:
@@ -567,12 +625,13 @@ class Controller:
             'mention_author': True,
             })
 
-    async def location(self, msg, place_name):
+    async def location(self, msg, place_name=None, *args):
         """Replies the user with the coordinates of the given place, as well as the snapshot and the URL
         """
         if not place_name:
             return
-        place_name = place_name.strip(' "\'')
+        if args:
+            place_name = f'{place_name} {" ".join(args)}'
         if place_name.lower() in MapController.locations:
             lat, lng, size = MapController.locations[place_name.lower()]
 
@@ -595,17 +654,11 @@ class Controller:
                 'delete_after': 3,
                 })
 
-    async def distance(self, msg, args):
+    async def distance(self, msg, place1=None, place2=None, *args):
         """Replies the user with the distance between the two place names mentioned
         """
-        if not args:
+        if not place1 or not place2:
             return
-        args = args.strip()
-        match = re.match('^("[^"]+"|[^" ]+) ("[^"]+"|[^" ]+)', args)
-        if not match:
-            return
-        place1 = match.group(1).strip('"')
-        place2 = match.group(2).strip('"')
         try:
             if place1.lower() not in MapController.locations:
                 raise ValueError(place1)
@@ -629,10 +682,10 @@ class Controller:
             'mention_author': True,
             })
 
-    async def help(self, msg, args=None, intro=None):
+    async def help(self, msg, *args, intro=None):
         """Replies the user with the help message
         """
-        sudo = allow_sudo(msg)
+        sudo = Guard.allow_sudo(msg)
         if intro is not None:
             intro = f'{intro.strip()} '
         else:
@@ -658,24 +711,29 @@ class Controller:
     async def not_found(self, msg, command):
         """Replies the user with the help message, prepended with the information about invalid command
         """
-        await self.help(msg, intro=f'I do not understand `{command}`.')
+        await msg.channel.send(**{
+            'content': f'I do not understand `{command}`',
+            'reference': msg.to_reference(),
+            'mention_author': True,
+            'delete_after': 3,
+            })
 
     ### Below are private functions
 
     @privileged
-    async def echo(self, msg, args):
+    async def echo(self, msg, text=None):
         """Replies the user with their own message
         """
-        if args is None:
-            args = ''
+        if text is None:
+            text = ''
         await msg.channel.send(**{
-            'content': args,
+            'content': text,
             'reference': msg.to_reference(),
             'mention_author': True,
             })
 
     @privileged
-    async def clear_cache(self, msg, args):
+    async def clear_cache(self, msg, *args):
         """Clears the cache
         """
         self.get_wikitext.cache_clear()
@@ -684,17 +742,78 @@ class Controller:
             })
 
     @privileged
-    async def status(self, msg, args):
+    async def status(self, msg, *args):
         """Send some status about the bots
         """
         content = f'Start time: {self.start_time}\n'
+        content = f'{content}State: {guard.state}\n'
+        content = f'{content}SUDO_IDS: {Guard.SUDO_IDS}\n'
+        content = f'{content}SUDO_CHANNELS: {Guard.SUDO_CHANNELS}\n'
+        content = f'{content}TRUSTED_ROLES: {Guard.TRUSTED_ROLES}\n'
         content = f'{content}Reply count: {self.reply_count}\n'
         content = f'{content}Reply count per command:'
         for command, count in self.reply_counts.items():
             content += f'\n• {command}: {count}'
         await msg.channel.send(**{
             'content': content,
+            'reference': msg.to_reference(),
+            'mention_author': True,
             })
+
+    @privileged
+    async def restate(self, msg, state_str=None, *args):
+        """Changes the state of the bot
+        """
+        state = State.get_state(state_str)
+        if state is None:
+            content = f'Unknown state: `{state_str}`'
+        elif guard.state == state:
+            content = f'Already in {state}'
+        else:
+            guard.state = state
+            if state == State.NORMAL:
+                content = 'Resuming operations from all users'
+            elif state == State.TRUSTED_ONLY:
+                content = 'Only trusted users will be replied'
+            elif state == State.SUDO_ONLY:
+                content = 'Only allowing sudo access'
+            else:
+                content = 'Unhandled state: `{state}`'
+        await msg.channel.send(**{
+            'content': content,
+            'reference': msg.to_reference(),
+            'mention_author': True,
+            })
+
+    @privileged
+    async def manage(self, msg, *args):
+        """Manages the guard of this bot
+
+        Syntax: manage [add | remove] [TRUSTED_ROLES | SUDO_IDS | SUDO_CHANNELS] ENTITYID (ENTITYID)*
+        """
+        if len(args) < 3:
+            return
+        sub_command = args[0]
+        if sub_command not in ['add', 'remove']:
+            return
+        var = args[1]
+        if var not in ['TRUSTED_ROLES', 'SUDO_IDS', 'SUDO_CHANNELS']:
+            return
+        if var == 'TRUSTED_ROLES':
+            var = Guard.TRUSTED_ROLES
+        elif var == 'SUDO_IDS':
+            var = Guard.SUDO_IDS
+        elif var == 'SUDO_CHANNELS':
+            var = Guard.SUDO_CHANNELS
+        else:
+            return
+        entityids = args[2:]
+        for entityid in entityids:
+            if sub_command == 'add':
+                var.add(int(entityid))
+            elif sub_command == 'remove':
+                var.remove(int(entityid))
+        await msg.add_reaction('🆗')
 
 controller = Controller()
 
@@ -709,16 +828,21 @@ async def on_message(message):
         # If this is our own (the bot's) message, ignore it
         return
 
-    # Give the bot creator access to more commands
-    sudo = allow_sudo(message)
+    # Privilege check
+    if not guard.allow(message):
+        return
 
-    logging.info(f'Received message: {message.content} from {message.author} at {message.created_at}')
-    intent = get_intent(message)
+    logging.info((f'Received message: {message.content}\n'
+                 +f'\tFrom {message.author} ({message.author.id})\n'
+                 +f'\tIn {message.channel} ({message.channel.id})\n'
+                 +f'\tServer {message.guild} ({message.guild.id if message.guild else ""})\n'
+                 +f'\tAt {message.created_at}'))
+    intent = Intent.get_intent(message)
     logging.info(f'Intent: {intent}')
     if intent == Intent.DIRECT:
         command, args = controller.get_args(message)
         logging.info(f'Command: {command}, args: {args}')
-        await controller.execute(message, command, args, sudo)
+        await controller.execute(message, command, args)
     elif intent == Intent.MAP:
         matches = re.finditer(MapController.MAP_REGEX, message.content)
         for idx, match in enumerate(matches):
