@@ -27,6 +27,7 @@ from collections import Counter
 
 logging.basicConfig(level=logging.INFO)
 
+# Basic info about this bot
 CLIENT_ID = '839181905249304606'
 PUBLIC_KEY = '8e3a6e541e5954298dc0087903037ef6d7c5480d599f2ae8c25d796af4e6ac25'
 TOKEN = None
