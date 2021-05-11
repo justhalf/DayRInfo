@@ -948,7 +948,8 @@ async def on_reaction_add(reaction, user):
     try:
         if reaction.message.author == client.user and (reaction.message.channel.type == discord.ChannelType.private or reaction.message.reference.cached_message.author == user) and reaction.emoji == '❌':
             await reaction.message.delete()
-    except:
+    except Exception as e:
+        logging.error(e)
         return
 
 @client.event
