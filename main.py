@@ -448,6 +448,19 @@ class Controller:
                 })
 
     @staticmethod
+    def canonical_title(title):
+        """Returns the canonical title for the given title, if found"""
+        url = Controller.WIKI_API_SEARCH_URL + item
+        response = requests.get(url).text
+        try:
+            pages = json.loads(response)['query']['search']
+            if len(pages) == 0:
+                return None
+            return pages[0]['title']
+        except:
+            return None
+
+    @staticmethod
     def link_from_title(title):
         page_url = f'<https://dayr.fandom.com/wiki/{requests.utils.quote(title)}>'
         return page_url
@@ -467,28 +480,21 @@ class Controller:
             return
         if args:
             item = f'{item} {" ".join(args)}'
-        url = Controller.WIKI_API_SEARCH_URL + item
-        response = requests.get(url).text
-        try:
-            pages = json.loads(response)['query']['search']
-            if len(pages) == 0:
-                await msg.channel.send(**{
-                    'content': f'There are no pages matching `{item}`',
-                    'reference': msg.to_reference(),
-                    'mention_author': True,
-                    'delete_after': 3,
-                    })
-                return
-            page_url = Controller.link_from_title(pages[0]["title"])
+        title = Controller.canonical_title(title)
+        if title is None:
             await msg.channel.send(**{
-                'content': page_url,
+                'content': f'There are no pages matching `{item}`',
                 'reference': msg.to_reference(),
                 'mention_author': True,
+                'delete_after': 3,
                 })
-        except Exception as e:
-            logging.info(response)
-            logging.error(e)
-            return None
+            return
+        page_url = Controller.link_from_title(title)
+        await msg.channel.send(**{
+            'content': page_url,
+            'reference': msg.to_reference(),
+            'mention_author': True,
+            })
 
     async def recipe(self, msg, item=None, *args):
         """Replies the user with the crafting recipe of the given item
@@ -497,6 +503,29 @@ class Controller:
             return
         if args:
             item = f'{item} {" ".join(args)}'
+        canonical = Controller.canonical_title(item)
+        if canonical:
+            item = canonical
+        if item == 'BelAZ':
+            content = f'To complete the mission "Moving Town" to get BelAZ, you need:\n'
+            content += '• Nuclear reactor part x3\n'
+            content += '• Clean water x1,000\n'
+            content += '• Steel tools x10\n'
+            content += '• Auto spare parts x500\n'
+            content += '• Iron pipe x1,000\n'
+            content += '• Car battery x50\n'
+            content += '• Scrap x100,000\n'
+            content += '• Steel x50,000\n'
+            content += '• Lead x100,000\n'
+            content += '• Nail x10,000\n'
+            content += '• Wire x10,000\n'
+            content += '• Insulating tape x1,000'
+            await msg.channel.send(**{
+                'content': content,
+                'reference': msg.to_reference(),
+                'mention_author': True,
+                })
+            return
         try:
             wikitext = Controller.get_wikitext(item)
         except ValueError as e:
@@ -510,7 +539,9 @@ class Controller:
             emojis = {}
         parsed = WTP.parse(wikitext)
         content = None
+        template_names = []
         for template in parsed.templates:
+            template_names.append(template.name.strip())
             if template.name.strip().lower() == 'recipe':
                 args = template.arguments
                 logging.info(args)
@@ -562,6 +593,7 @@ class Controller:
                 if tools:
                     content = f'{content}\nAnd these tools:\n{tools}'
                 break
+        logging.info(f'Templates in {item}: {", ".join(template_names)}')
         for table in parsed.tables:
             if 'Ingredients' in table:
                 rows = table.string.split('|-')[1:]
@@ -598,6 +630,9 @@ class Controller:
             return
         if args:
             item = f'{item} {" ".join(args)}'
+        canonical = Controller.canonical_title(item)
+        if canonical:
+            item = canonical
         try:
             wikitext = Controller.get_wikitext(item)
         except ValueError as e:
