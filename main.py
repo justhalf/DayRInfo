@@ -446,6 +446,14 @@ class Controller:
     async def link(self, msg, item=None, *args):
         """Replies the user with the wikilink for the specified item
         """
+        if not msg.channel.permissions_for(client.user).embed_links:
+            await msg.channel.send(**{
+                'content': 'Cannot send links on this channel',
+                'reference': msg.to_reference(),
+                'mention_author': True,
+                'delete_after': 3,
+                })
+            return
         if not item:
             return
         if args:
@@ -693,6 +701,14 @@ class Controller:
     async def snapshot(self, msg, *args):
         """Replies the user with a snapshot of the specified location
         """
+        if not msg.channel.permissions_for(client.user).attach_files:
+            await msg.channel.send(**{
+                'content': 'Cannot send images on this channel',
+                'reference': msg.to_reference(),
+                'mention_author': True,
+                'delete_after': 3,
+                })
+            return
         if not args:
             return
         args = list(args)
@@ -748,18 +764,25 @@ class Controller:
             place_name = f'{place_name} {" ".join(args)}'
         if place_name.lower() in MapController.locations:
             lat, lng, size = MapController.locations[place_name.lower()]
-
             map_controller = MapController(lat, lng, 1, lat, lng)
-            image = map_controller.generate_snapshot(include_world=True)
-            url = map_controller.generate_url()
 
-            content = f'The location `{place_name}` is located at ({lat:.2f}, {lng:.2f})\nURL: <{url}>'
-            await msg.channel.send(**{
+            content = f'The location `{place_name}` is located at ({lat:.2f}, {lng:.2f})'
+            if msg.channel.permissions_for(client.user).embed_links:
+                # If can embed link, post the URL too
+                url = map_controller.generate_url()
+                content = f'{content}\nURL: <{url}>'
+
+            response = {
                 'content': content,
-                'file': discord.File(image, filename=f'snapshot_{map_controller.get_id()}.png'),
                 'reference': msg.to_reference(),
                 'mention_author': True,
-                })
+                }
+
+            if msg.channel.permissions_for(client.user).attach_files:
+                # If can post image, post the snapshot too
+                image = map_controller.generate_snapshot(include_world=True)
+                response['file'] = discord.File(image, filename=f'snapshot_{map_controller.get_id()}.png'),
+            await msg.channel.send(**response)
         else:
             await msg.channel.send(**{
                 'content': f'There is no location named `{place_name}`',
@@ -976,6 +999,15 @@ async def on_message(message):
         logging.info(f'Command: {command}, args: {args}')
         await controller.execute(message, command, args)
     elif intent == Intent.MAP:
+        if not message.channel.permissions_for(client.user).attach_files:
+            await msg.channel.send(**{
+                'content': 'Cannot send images on this channel',
+                'reference': msg.to_reference(),
+                'mention_author': True,
+                'delete_after': 3,
+                })
+            return
+            
         matches = re.finditer(MapController.MAP_REGEX, message.content)
         for idx, match in enumerate(matches):
             map_controller = MapController.from_match(match)
