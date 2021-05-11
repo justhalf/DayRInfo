@@ -781,7 +781,7 @@ class Controller:
             if msg.channel.guild.me.permissions_in(msg.channel).attach_files:
                 # If can post image, post the snapshot too
                 image = map_controller.generate_snapshot(include_world=True)
-                response['file'] = discord.File(image, filename=f'snapshot_{map_controller.get_id()}.png'),
+                response['file'] = discord.File(image, filename=f'snapshot_{map_controller.get_id()}.png')
             await msg.channel.send(**response)
         else:
             await msg.channel.send(**{
