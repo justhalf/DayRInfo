@@ -692,6 +692,7 @@ class Controller:
         """
         if not args:
             return
+        args = list(args)
         if args[0] == 'world':
             include_world = True
             args.pop(0)
