@@ -303,11 +303,12 @@ class Controller:
             'link': ('itemName', '🔗 Show the wikilink for the specified item', True, 10),
             'recipe': ('itemName', '📜 Show the recipe for the specified item', True, 10),
             'info': ('itemName', '🔍 Show the infobox for the specified item', True, 10),
+            'trader': ('(itemName|placeName)', '🏛️ Show where we can trade for and from the specified item', True, 10),
             'snapshot': ('("world") ("marker") lat lng (zoom)',
                 ('📸 Show a snapshot of the map at the specified location and zoom (-3 to 5).\n'
                 +'\tIf "world" is specified (without quotes) the world map is also shown\n'
                 +'\tIf "marker" is specified (without quotes) a marker will be shown'), True, 60),
-            'location': ('place_name', '📍 Show the location details of the specified place', True, 60),
+            'location': ('placeName', '📍 Show the location details of the specified place', True, 60),
             'distance': ('"place1" "place2"', '📐 Calculate the distance between the two places', True, 10),
 
             # Privileged commands below
@@ -366,6 +367,7 @@ class Controller:
         self.start_time = datetime.utcnow()
         self.reply_count = 0
         self.reply_counts = Counter()
+        self.trading_table = None
 
     def can_execute(self, msg, command, now):
         """Returns whether the author of the message is allowed to run the command
@@ -375,8 +377,9 @@ class Controller:
         expiry = self.user_limit[command].get(msg.author.id, 0)
         return now > expiry, expiry-now
 
+    @staticmethod
     @lru_cache(maxsize=WIKI_CACHE_LIMIT)
-    def get_wikitext(self, item):
+    def get_wikitext(item):
         """Returns the wikitext of the specified item.
 
         This method handles redirects as well.
@@ -431,6 +434,11 @@ class Controller:
                 'delete_after': 3,
                 })
 
+    @staticmethod
+    def link_from_title(title):
+        page_url = f'<https://dayr.fandom.com/wiki/{requests.utils.quote(title)}>'
+        return page_url
+
     async def link(self, msg, item=None, *args):
         """Replies the user with the wikilink for the specified item
         """
@@ -450,7 +458,7 @@ class Controller:
                     'delete_after': 3,
                     })
                 return
-            page_url = f'<https://dayr.fandom.com/wiki/{requests.utils.quote(pages[0]["title"])}>'
+            page_url = Controller.link_from_title(pages[0]["title"])
             await msg.channel.send(**{
                 'content': page_url,
                 'reference': msg.to_reference(),
@@ -469,7 +477,7 @@ class Controller:
         if args:
             item = f'{item} {" ".join(args)}'
         try:
-            wikitext = self.get_wikitext(item)
+            wikitext = Controller.get_wikitext(item)
         except ValueError as e:
             # Means the page is not found
             return
@@ -552,7 +560,7 @@ class Controller:
         if args:
             item = f'{item} {" ".join(args)}'
         try:
-            wikitext = self.get_wikitext(item)
+            wikitext = Controller.get_wikitext(item)
         except ValueError as e:
             # Means the page is not found
             return
@@ -586,6 +594,97 @@ class Controller:
             'reference': msg.to_reference(),
             'mention_author': True,
             })
+
+    def get_trading_table(self):
+        """Fetch and cache the trading table from wiki
+        """
+        if self.trading_table is None:
+            self.trading_table = {}
+            wikitext = Controller.get_wikitext('Trading')
+            for match in re.finditer(r"==== '''([^']+)''' ====\n((?:\*[^\n]+\n)+)", wikitext):
+                place = match.group(1)
+                trade_list = {'into':{}, 'from':{}}
+                for row in match.group(2).strip().split('\n'):
+                    trade = re.search(r'\* ([0-9,.]+) \[\[(?:[^|]+\|)?([^\]]+)\]\][ ]*->[ ]*([0-9,.]+) \[\[(?:[^|]+\|)?([^\]]+)\]\]', row)
+                    if not trade:
+                        logging.warn(f'No trade row in `{row}`')
+                        continue
+                    from_amt = int(trade.group(1).replace(',', ''))
+                    from_itm = trade.group(2).lower()
+                    to_amt = int(trade.group(3).replace(',', ''))
+                    to_itm = trade.group(4).lower()
+                    if from_itm not in trade_list['from']:
+                        trade_list['from'][from_itm] = []
+                    if to_itm not in trade_list['into']:
+                        trade_list['into'][to_itm] = []
+                    trade_list['from'][from_itm].append((to_itm, from_amt, to_amt))
+                    trade_list['into'][to_itm].append((from_itm, to_amt, from_amt))
+                if '(' in place:
+                    # Gorenichi (Kiev), Magnitogorsk (trader), Magnitogorsk (fitter)
+                    if place[0] == 'G':
+                        place = 'Kiev'
+                self.trading_table[place.lower()] = trade_list
+        return self.trading_table
+
+    async def trader(self, msg, arg=None, *args):
+        """Replies the user with a list of places that trade for and from the item
+        if the argument is an item name, and a list of possible trades if the argument is a location name
+
+        If the argument is empty, replies the user with the list of possible trading locations
+        """
+        trading_table = self.get_trading_table()
+        self_delete = False
+
+        if not arg:
+            content = '• '+'\n• '.join(place.capitalize() for place in trading_table.keys())
+            content = f'Places you can trade:\n{content}'
+        else:
+            if args:
+                arg = f'{arg} {" ".join(args)}'
+            # Check for place name
+            place_aliases = [arg.lower(), f'{arg.lower()} (fitter)', f'{arg.lower()} (trader)']
+            content = ''
+            for place in place_aliases:
+                if place in trading_table:
+                    # A location name
+                    trade_list = []
+                    for from_itm, to_list in trading_table[place.lower()]['from'].items():
+                        for to_itm, from_amt, to_amt in to_list:
+                            trade_list.append(f'• With **{from_amt} {from_itm}**, you get **{to_amt} {to_itm}**')
+                    if content:
+                        content += '\n\n'
+                    content += f'Trading in {place.capitalize()}:\n'+'\n'.join(trade_list)
+            if not content:
+                # An item name or not found
+                item = arg
+                from_list = []
+                into_list = []
+                for place, trade_lists in trading_table.items():
+                    aliases = [item.lower(), item+'s'.lower(), item[:-1].lower() if item[-1] == 's' else '']
+                    for alias in aliases:
+                        if not alias:
+                            continue
+                        if alias in trade_lists['from']:
+                            for to_itm, from_amt, to_amt in trade_lists['from'][alias]:
+                                from_list.append(f'• At **{place.capitalize()}** with *{from_amt} {item}*, you get **{to_amt} {to_itm}**')
+                        if alias in trade_lists['into']:
+                            for from_itm, to_amt, from_amt in trade_lists['into'][alias]:
+                                into_list.append(f'• At **{place.capitalize()}** with **{from_amt} {from_itm}**, you get *{to_amt} {item}*')
+                total_list = from_list + into_list
+                if len(total_list) == 0:
+                    content = f'Unrecognized place or item name: `{item}`'
+                    self_delete = True
+                else:
+                    content = f'Places that trades from and into {item}:\n'
+                    content += '\n'.join(total_list)
+        response = {
+                'content': content,
+                'reference': msg.to_reference(),
+                'mention_author': True,
+                }
+        if self_delete:
+            response['delete_after'] = 3
+        await msg.channel.send(**response)
 
     async def snapshot(self, msg, args):
         """Replies the user with a snapshot of the specified location
@@ -746,7 +845,7 @@ class Controller:
     async def clear_cache(self, msg, *args):
         """Clears the cache
         """
-        self.get_wikitext.cache_clear()
+        Controller.get_wikitext.cache_clear()
         await msg.channel.send(**{
             'content': 'Cache cleared',
             })
