@@ -326,6 +326,7 @@ class Controller:
 
             # Privileged commands below
             'echo': ('text', '🔤 Return back your text', False, 3),
+            'set_key': ('regex (help_key)', '🗝️ Change the trigger key (and the text in help message)', False, 3),
             'clear_cache': ('', '🧹 Clear the cache', False, 3),
             'status': ('', 'ℹ️ Show the status of the bot', False, 3),
             'restate': ('[Normal|Trusted|Sudo]', '🛠️ Change the state of the bot', False, 3),
@@ -334,7 +335,9 @@ class Controller:
             }
 
     # The regex to detect messages starting with a mention to this bot
-    KEY_REGEX = f'^(<@[!&]?{CLIENT_ID}>).*$'
+    KEY_REGEX_TEMPLATE = f'^(<@[!&]?{CLIENT_ID}>|##TEMPLATE##).*$'
+    KEY_REGEX= KEY_REGEX_TEMPLATE.replace('##TEMPLATE##', '~')
+    HELP_KEY = '~'
 
     # The URL to wiki API
     WIKI_API_REV_URL = 'https://dayr.fandom.com/api.php?action=query&prop=revisions&rvprop=content&format=json&rvslots=main&titles='
@@ -911,6 +914,10 @@ class Controller:
             intro = f'{intro.strip()} '
         else:
             intro = ''
+        if msg.channel.type == discord.ChannelType.private:
+            nick = '@DayRInfo'
+        else:
+            nick = f'@{msg.channel.guild.me.nick}'
         content = f'{intro}I understand the following commands (tag me at the start of the message):\n'
         for command, (args, desc, enabled, delay) in Controller.commands.items():
             if not sudo and not enabled:
@@ -919,10 +926,10 @@ class Controller:
                 args = f' {args.strip()}'
             if desc:
                 desc = f'\n\t{desc}'
-            content = f'{content}`@DayRInfo {command}{args}`{desc}\n'
+            content = f'{content}`{Controller.HELP_KEY}{command}{args}`{desc}\n'
         content = f'{content}----------\n'
-        content = f'{content}• Also, if you tag me on a message containing a link to the interactive Day R map 🗺️ with a location URL, I will send you a snapshot of the location.\n'
-        content = f'{content}• React with ❌ to any of my messages to delete it (if I still remember that it was my message)'
+        content = f'{content}• Also, if you tag this bot ({nick}) on a message containing a link to the interactive Day R map 🗺️ with a location URL, I will send you a snapshot of the location.\n'
+        content = f'{content}• React with ❌ to any of my messages to delete it (if I still remember that it was my message). You can only delete my messages that are directed to you.'
         await msg.author.send(**{
             'content': content,
             })
@@ -943,7 +950,9 @@ class Controller:
             'delete_after': 3,
             })
 
-    ### Below are private functions
+    ###################################
+    ### Below are private functions ###
+    ###################################
 
     @privileged
     async def echo(self, msg, text=None, *args):
@@ -955,6 +964,23 @@ class Controller:
             text = '{text} {" ".join(args)}'
         await msg.channel.send(**{
             'content': text,
+            'reference': msg.to_reference(),
+            'mention_author': True,
+            })
+
+    @privileged
+    async def set_key(self, msg, regex=None, help_key=None, *args):
+        """Sets the additional trigger phrase for the bot
+        """
+        if regex is None:
+            return
+        Controller.KEY_REGEX = Controller.KEY_REGEX_TEMPLATE.replace('##TEMPLATE##', regex)
+        if help_key is None:
+            help_key = regex
+        Controller.HELP_KEY = help_key
+        content = f'Additional trigger phrase updated to `{regex}`, and help key to `{help_key}`.\n'
+        await msg.channel.send(**{
+            'content': content,
             'reference': msg.to_reference(),
             'mention_author': True,
             })
@@ -1052,8 +1078,6 @@ controller = Controller()
 
 @client.event
 async def on_reaction_add(reaction, user):
-    logging.info(reaction.message.channel)
-    logging.info(reaction.message.author)
     try:
         if reaction.message.author == client.user and (reaction.message.channel.type == discord.ChannelType.private or reaction.message.reference.cached_message.author == user) and reaction.emoji == '❌':
             await reaction.message.delete()
