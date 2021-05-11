@@ -811,7 +811,7 @@ class Controller:
         content = f'{content}----------\n'
         content = f'{content}• Also, if you tag me on a message containing a link to the interactive Day R map 🗺️ with a location URL, I will send you a snapshot of the location.\n'
         content = f'{content}• React with ❌ to any of my messages to delete it (if I still remember that it was my message)'
-        await msg.channel.send(**{
+        await msg.author.send(**{
             'content': content,
             'reference': msg.to_reference(),
             'mention_author': True,
