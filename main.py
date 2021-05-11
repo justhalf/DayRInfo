@@ -516,6 +516,8 @@ class Controller:
                 logging.info(args)
                 ingredients = []
                 tools = []
+                level = []
+                points = []
                 def parse_args(args):
                     idx = 0
                     while idx < len(args):
@@ -536,11 +538,27 @@ class Controller:
                             templates = WTP.parse(arg.split('=', maxsplit=1)[1].strip()).templates
                             if len(templates) > 0:
                                 parse_args(templates[0].arguments)
+                        elif arg.startswith('level'):
+                            try:
+                                level.append(int(arg.split('=')[1].strip()))
+                            except:
+                                pass
+                        elif arg.startswith('research'):
+                            try:
+                                points.append(int(arg.split('=')[1].strip()))
+                            except:
+                                pass
                         idx += 1
                 parse_args(args)
+                requirements = ''
+                if level:
+                    if points:
+                        requirements = f' (level {level[0]}, {points[0]} points)'
+                    else:
+                        requirements = f' (level {level[0]})'
                 ingredients = '• '+'\n• '.join(ingredients)
                 tools = '• '+'\n• '.join(tools) if tools else ''
-                content = f'To craft {item}, you need:\n{ingredients}'
+                content = f'To craft {item}{requirements}, you need:\n{ingredients}'
                 if tools:
                     content = f'{content}\nAnd these tools:\n{tools}'
                 break
