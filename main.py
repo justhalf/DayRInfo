@@ -407,7 +407,7 @@ class Controller:
                 raise ValueError('Page not found')
             wikitext = pages[key]['revisions'][0]['slots']['main']['*']
             while wikitext.startswith('#REDIRECT'):
-                item = wikitext.split(' ', maxsplit=1)[1][2:-2]
+                item = re.findall('([^[\]]+)(?:\]|$)', wikitext[len('#REDIRECT'):].strip())[0]
                 url = Controller.WIKI_API_REV_URL + item
                 response = requests.get(url).text
                 pages = json.loads(response)['query']['pages']
@@ -588,7 +588,7 @@ class Controller:
         contents = []
         template_names = []
         for template in WTP.parse(wikitext).templates:
-            template_names.append(template.name)
+            template_names.append(template.name.strip())
             if self.is_infobox(template.name):
                 args = template.arguments
                 title = item
