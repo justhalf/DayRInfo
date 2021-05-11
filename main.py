@@ -450,7 +450,7 @@ class Controller:
     @staticmethod
     def canonical_title(title):
         """Returns the canonical title for the given title, if found"""
-        url = Controller.WIKI_API_SEARCH_URL + item
+        url = Controller.WIKI_API_SEARCH_URL + title
         response = requests.get(url).text
         try:
             pages = json.loads(response)['query']['search']
