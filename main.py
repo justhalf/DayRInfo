@@ -813,8 +813,6 @@ class Controller:
         content = f'{content}• React with ❌ to any of my messages to delete it (if I still remember that it was my message)'
         await msg.author.send(**{
             'content': content,
-            'reference': msg.to_reference(),
-            'mention_author': True,
             })
 
     async def not_found(self, msg, command):
