@@ -499,6 +499,14 @@ class Controller:
     async def recipe(self, msg, item=None, *args):
         """Replies the user with the crafting recipe of the given item
         """
+        if not Guard.has_permission(msg, 'embed_links'):
+            await msg.channel.send(**{
+                'content': 'I need embed_links permission to answer in this channel',
+                'reference': msg.to_reference(),
+                'mention_author': True,
+                'delete_after': 3,
+                })
+            return
         if not item:
             return
         if args:
@@ -506,6 +514,7 @@ class Controller:
         canonical = Controller.canonical_title(item)
         if canonical:
             item = canonical
+        page_url = Controller.link_from_title(item)
         if item == 'BelAZ':
             content = f'To complete the mission "Moving Town" to get BelAZ, you need:\n'
             content += '• Nuclear reactor part x3\n'
@@ -604,6 +613,7 @@ class Controller:
                 break
         if content is None:
             return
+        content += f'\nSource: {page_url}'
         await msg.channel.send(**{
             'content': content,
             'reference': msg.to_reference(),
@@ -626,6 +636,14 @@ class Controller:
     async def info(self, msg, item=None, *args):
         """Replies the user with the information from infobox of the specified item
         """
+        if not Guard.has_permission(msg, 'embed_links'):
+            await msg.channel.send(**{
+                'content': 'I need embed_links permission to answer in this channel',
+                'reference': msg.to_reference(),
+                'mention_author': True,
+                'delete_after': 3,
+                })
+            return
         if not item:
             return
         if args:
@@ -633,6 +651,7 @@ class Controller:
         canonical = Controller.canonical_title(item)
         if canonical:
             item = canonical
+        page_url = Controller.link_from_title(item)
         try:
             wikitext = Controller.get_wikitext(item)
         except ValueError as e:
@@ -660,7 +679,7 @@ class Controller:
                         entries[k] = v.replace('\n\n', '\n').replace('\n', '\n\t')
                 entries = [f'{k} = {v}' for k, v in entries.items()]
                 entries = '• '+'\n• '.join(entries)
-                content = f'## **{title}** ##\n{template.name.strip()}\n{entries}'
+                content = f'## **{title}** ##\nSource: {page_url}\n{template.name.strip()}\n{entries}'
                 contents.append(content)
         logging.info(f'Templates at {item}: '+', '.join(template_names))
         await msg.channel.send(**{
