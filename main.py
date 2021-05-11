@@ -682,6 +682,8 @@ class Controller:
                 content = f'## **{title}** ##\nSource: {page_url}\n{template.name.strip()}\n{entries}'
                 contents.append(content)
         logging.info(f'Templates at {item}: '+', '.join(template_names))
+        if not contents:
+            return
         await msg.channel.send(**{
             'content': '\n===\n'.join(contents),
             'reference': msg.to_reference(),
