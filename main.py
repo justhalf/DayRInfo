@@ -952,10 +952,10 @@ async def on_message(message):
         return
 
     logging.info((f'Received message: {message.content}\n'
-                 +f'\tFrom {message.author} ({message.author.id})\n'
-                 +f'\tIn {message.channel} ({message.channel.id})\n'
-                 +f'\tServer {message.guild} ({message.guild.id if message.guild else ""})\n'
-                 +f'\tAt {message.created_at}'))
+                 +f'.\tFrom {message.author} ({message.author.id})\n'
+                 +f'.\tIn {message.channel} ({message.channel.id})\n'
+                 +f'.\tServer {message.guild} ({message.guild.id if message.guild else ""})\n'
+                 +f'.\tAt {message.created_at}'))
     intent = Intent.get_intent(message)
     logging.info(f'Intent: {intent}')
     if intent == Intent.DIRECT:
