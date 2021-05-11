@@ -480,7 +480,7 @@ class Controller:
             return
         if args:
             item = f'{item} {" ".join(args)}'
-        title = Controller.canonical_title(title)
+        title = Controller.canonical_title(item)
         if title is None:
             await msg.channel.send(**{
                 'content': f'There are no pages matching `{item}`',
