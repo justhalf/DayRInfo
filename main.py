@@ -623,6 +623,7 @@ class Controller:
     def is_infobox(self, name):
         """Returns True if the template name is a type of infobox
         """
+        name = name.strip()
         if name.lower().startswith('infobox'):
             return True
         if name == 'Armors_(NEW)':
