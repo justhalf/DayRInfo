@@ -446,7 +446,7 @@ class Controller:
     async def link(self, msg, item=None, *args):
         """Replies the user with the wikilink for the specified item
         """
-        if not msg.channel.permissions_for(client).embed_links:
+        if not client.user.permissions_in(msg.channel).embed_links:
             await msg.channel.send(**{
                 'content': 'Cannot send links on this channel',
                 'reference': msg.to_reference(),
@@ -701,7 +701,7 @@ class Controller:
     async def snapshot(self, msg, *args):
         """Replies the user with a snapshot of the specified location
         """
-        if not msg.channel.permissions_for(client).attach_files:
+        if not client.user.permissions_in(msg.channel).attach_files:
             await msg.channel.send(**{
                 'content': 'Cannot send images on this channel',
                 'reference': msg.to_reference(),
@@ -767,7 +767,7 @@ class Controller:
             map_controller = MapController(lat, lng, 1, lat, lng)
 
             content = f'The location `{place_name}` is located at ({lat:.2f}, {lng:.2f})'
-            if msg.channel.permissions_for(client).embed_links:
+            if client.user.permissions_in(msg.channel).embed_links:
                 # If can embed link, post the URL too
                 url = map_controller.generate_url()
                 content = f'{content}\nURL: <{url}>'
@@ -778,7 +778,7 @@ class Controller:
                 'mention_author': True,
                 }
 
-            if msg.channel.permissions_for(client).attach_files:
+            if client.user.permissions_in(msg.channel).attach_files:
                 # If can post image, post the snapshot too
                 image = map_controller.generate_snapshot(include_world=True)
                 response['file'] = discord.File(image, filename=f'snapshot_{map_controller.get_id()}.png'),
@@ -999,7 +999,7 @@ async def on_message(message):
         logging.info(f'Command: {command}, args: {args}')
         await controller.execute(message, command, args)
     elif intent == Intent.MAP:
-        if not message.channel.permissions_for(client).attach_files:
+        if not client.user.permissions_in(message.channel).attach_files:
             await msg.channel.send(**{
                 'content': 'Cannot send images on this channel',
                 'reference': msg.to_reference(),
