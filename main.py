@@ -814,6 +814,12 @@ class Controller:
         await msg.author.send(**{
             'content': content,
             })
+        await msg.channel.send(**{
+            'content': 'Command list sent via DM!',
+            'reference': msg.to_reference(),
+            'mention_author': True,
+            'delete_after': 3,
+            })
 
     async def not_found(self, msg, command):
         """Replies the user with the help message, prepended with the information about invalid command
