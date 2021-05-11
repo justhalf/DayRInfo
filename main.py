@@ -317,7 +317,7 @@ class Controller:
             'clear_cache': ('', '🧹 Clear the cache', False, 3),
             'status': ('', 'ℹ️ Show the status of the bot', False, 3),
             'restate': ('[Normal|Trusted|Sudo]', '🛠️ Change the state of the bot', False, 3),
-            'manage': ('[add|remove] [BANNED_USERSTRUSTED_ROLES|SUDO_IDS|SUDO_CHANNELS] ENTITYID (ENTITYID)*',
+            'manage': ('[add|remove] [BANNED_USERS|TRUSTED_ROLES|SUDO_IDS|SUDO_CHANNELS] ENTITYID (ENTITYID)*',
                        '🔒 Manage the sudo list and trusted roles', False, 3),
             }
 
@@ -1006,8 +1006,8 @@ def main(args=None):
         with open('author_dm.txt', 'r') as infile:
             Guard.AUTHOR_DM= int(infile.read().strip())
     except:
-        Guard.AUTHOR = os.environ.get('AUTHOR')
-        Guard.AUTHOR_DM = os.environ.get('AUTHOR_DM')
+        Guard.AUTHOR = int(os.environ.get('AUTHOR'))
+        Guard.AUTHOR_DM = int(os.environ.get('AUTHOR_DM'))
     Guard.SUDO_IDS.add(Guard.AUTHOR)
     try:
         # Map all location names (in all languages) into their lat, lng and size (for name collision handling)
