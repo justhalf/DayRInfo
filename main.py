@@ -687,7 +687,7 @@ class Controller:
             response['delete_after'] = 3
         await msg.channel.send(**response)
 
-    async def snapshot(self, msg, args):
+    async def snapshot(self, msg, *args):
         """Replies the user with a snapshot of the specified location
         """
         if not args:
@@ -835,11 +835,13 @@ class Controller:
     ### Below are private functions
 
     @privileged
-    async def echo(self, msg, text=None):
+    async def echo(self, msg, text=None, *args):
         """Replies the user with their own message
         """
         if text is None:
             text = ''
+        if args:
+            text = '{text} {" ".join(args)}'
         await msg.channel.send(**{
             'content': text,
             'reference': msg.to_reference(),
