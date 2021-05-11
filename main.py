@@ -312,7 +312,7 @@ async def on_ready():
 class Controller:
     # The list of supported commands, mapped to its description
     commands = {
-            'help': ('', '❓ Show this help', True, 0),
+            'help': ('', '❓ Show this help (and other bots\' help message too)', True, 0),
             'link': ('itemName', '🔗 Show the wikilink for the specified item', True, 10),
             'recipe': ('itemName', '📜 Show the recipe for the specified item', True, 10),
             'info': ('itemName', '🔍 Show the infobox for the specified item', True, 10),
