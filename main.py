@@ -56,7 +56,7 @@ class Guard:
     AUTHOR = None
     AUTHOR_DM = None
 
-    SUDO_IDS = set([None])
+    SUDO_IDS = set()
     SUDO_CHANNELS = set()
 
     TRUSTED_ROLES = set(['Verification Tier Level 2'])
@@ -999,6 +999,15 @@ def main(args=None):
             TOKEN = infile.read().strip()
     except:
         TOKEN = os.environ.get('TOKEN')
+    try:
+        with open('author.txt', 'r') as infile:
+            Guard.AUTHOR = int(infile.read().strip())
+        with open('author_dm.txt', 'r') as infile:
+            Guard.AUTHOR_DM= int(infile.read().strip())
+    except:
+        Guard.AUTHOR = os.environ.get('AUTHOR')
+        Guard.AUTHOR_DM = os.environ.get('AUTHOR_DM')
+    Guard.SUDO_IDS.add(Guard.AUTHOR)
     try:
         # Map all location names (in all languages) into their lat, lng and size (for name collision handling)
         with open(location_path, 'r') as infile:
