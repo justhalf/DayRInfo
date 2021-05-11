@@ -787,7 +787,7 @@ class Controller:
                 'mention_author': True,
                 }
 
-            if Guard.has_permission('attach_files'):
+            if Guard.has_permission(msg, 'attach_files'):
                 # If can post image, post the snapshot too
                 image = map_controller.generate_snapshot(include_world=True)
                 response['file'] = discord.File(image, filename=f'snapshot_{map_controller.get_id()}.png')
