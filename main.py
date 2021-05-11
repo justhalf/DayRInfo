@@ -97,8 +97,11 @@ class Guard:
             return True
         if author.id in Guard.BANNED_USERS:
             return False
-        if set([role.name for role in author.roles]).intersection(Guard.TRUSTED_ROLES):
-            return True
+        try:
+            if set([role.name for role in author.roles]).intersection(Guard.TRUSTED_ROLES):
+                return True
+        except:
+            return False
         return False
 
 guard = Guard()
