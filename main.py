@@ -327,6 +327,7 @@ class Controller:
             # Privileged commands below
             'echo': ('text', '🔤 Return back your text', False, 3),
             'set_key': ('regex (help_key)', '🗝️ Change the trigger key (and the text in help message)', False, 3),
+            'set_activity': ('activity', '⚽ Set the bot\'s activity', False, 3),
             'clear_cache': ('', '🧹 Clear the cache', False, 3),
             'status': ('', 'ℹ️ Show the status of the bot', False, 3),
             'restate': ('[Normal|Trusted|Sudo]', '🛠️ Change the state of the bot', False, 3),
@@ -984,6 +985,11 @@ class Controller:
             'reference': msg.to_reference(),
             'mention_author': True,
             })
+
+    @privileged
+    async def set_activity(self, msg, activity=None, *args):
+        """Sets the activity of the bot"""
+        await client.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=activity))
 
     @privileged
     async def clear_cache(self, msg, *args):
