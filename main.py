@@ -650,7 +650,7 @@ class Controller:
             return True
         if name == 'All_inclusive_infobox_2020':
             return True
-        if name == 'Item':
+        if name.lower() == 'item':
             return True
         return False
 
