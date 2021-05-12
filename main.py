@@ -800,7 +800,7 @@ class Controller:
                                 into_list.append(f'• At **{place.capitalize()}** with **{from_amt} {from_itm}**, you get *{to_amt} {item}*')
                 total_list = from_list + into_list
                 if len(total_list) == 0:
-                    content = f'Unrecognized place or item name: `{item}`'
+                    content = f'Could not find any trading option for `{item}`'
                     self_delete = True
                 else:
                     content = f'Places that trades from and into {item}:\n'
