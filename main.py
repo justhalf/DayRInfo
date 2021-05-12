@@ -444,8 +444,12 @@ class Controller:
             self.reply_count += 1
             self.reply_counts[command] += 1
         else:
+            if delay < 1:
+                delay = f'{delay / NS_IN_S:.1f}'
+            else:
+                delay = f'{delay // NS_IN_S}'
             await msg.channel.send(**{
-                'content': f'You can only use this command in {delay // NS_IN_S} more seconds',
+                'content': f'You can only use this command in {delay} more seconds',
                 'reference': msg.to_reference(),
                 'mention_author': True,
                 'delete_after': 3,
@@ -543,6 +547,12 @@ class Controller:
             wikitext = Controller.get_wikitext(item)
         except ValueError as e:
             # Means the page is not found
+            await msg.channel.send(**{
+                'content': f'No page found for `{item}`',
+                'reference': msg.to_reference(),
+                'mention_author': True,
+                'delete_after': 3,
+                })
             return
         try:
             emojis = {emoji.name.lower(): f'<:{emoji.name}:{emoji.id}> ' for emoji in msg.guild.emojis if emoji.available}
@@ -616,6 +626,12 @@ class Controller:
                 content = f'To cook {item}, you need:\n{ingredients}'
                 break
         if content is None:
+            await msg.channel.send(**{
+                'content': f'No recipe found for `{item}`',
+                'reference': msg.to_reference(),
+                'mention_author': True,
+                'delete_after': 3,
+                })
             return
         content += f'\nSource: {page_url}'
         await msg.channel.send(**{
@@ -661,6 +677,12 @@ class Controller:
             wikitext = Controller.get_wikitext(item)
         except ValueError as e:
             # Means the page is not found
+            await msg.channel.send(**{
+                'content': f'No page found for `{item}`',
+                'reference': msg.to_reference(),
+                'mention_author': True,
+                'delete_after': 3,
+                })
             return
         contents = []
         template_names = []
@@ -688,6 +710,12 @@ class Controller:
                 contents.append(content)
         logging.info(f'Templates at {item}: '+', '.join(template_names))
         if not contents:
+            await msg.channel.send(**{
+                'content': f'No infobox found for `{item}`',
+                'reference': msg.to_reference(),
+                'mention_author': True,
+                'delete_after': 3,
+                })
             return
         await msg.channel.send(**{
             'content': '\n===\n'.join(contents),
