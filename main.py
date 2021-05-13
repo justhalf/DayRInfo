@@ -337,7 +337,7 @@ class Controller:
 
     # The regex to detect messages starting with a mention to this bot
     KEY_REGEX_TEMPLATE = f'^(<@[!&]?{CLIENT_ID}>|##TEMPLATE##).*$'
-    KEY_REGEX= KEY_REGEX_TEMPLATE.replace('##TEMPLATE##', '~')
+    KEY_REGEX= KEY_REGEX_TEMPLATE.replace('##TEMPLATE##', '~(?!=\\^)')
     HELP_KEY = '~'
 
     # The URL to wiki API
