@@ -16,9 +16,9 @@ import re
 from PIL import Image, ImageDraw
 from pathlib import Path
 from io import BytesIO
-from asyncio import create_task as run
+from asyncio import create_task as run, sleep
+import aiohttp
 import wikitextparser as WTP
-import requests
 import json
 from functools import lru_cache, wraps
 import time
@@ -178,7 +178,7 @@ class MapController:
 
     __str__ = __repr__
 
-    def generate_snapshot(self, include_world=True):
+    async def generate_snapshot(self, include_world=True):
         """Generate a snapshot for this location.
 
         include_world: If True, will include the world map at the bottom as the bigger picture
@@ -337,8 +337,11 @@ class Controller:
 
     # The regex to detect messages starting with a mention to this bot
     KEY_REGEX_TEMPLATE = f'^(<@[!&]?{CLIENT_ID}>|##TEMPLATE##).*$'
-    KEY_REGEX= KEY_REGEX_TEMPLATE.replace('##TEMPLATE##', '~(?!=\\^)')
+    KEY_REGEX= KEY_REGEX_TEMPLATE.replace('##TEMPLATE##', '~(?!~)')
     HELP_KEY = '~'
+
+    prev_regex = None
+    prev_help = None
 
     # The URL to wiki API
     WIKI_API_REV_URL = 'https://dayr.fandom.com/api.php?action=query&prop=revisions&rvprop=content&format=json&rvslots=main&titles='
@@ -395,15 +398,22 @@ class Controller:
         return now > expiry, expiry-now
 
     @staticmethod
+    async def http_get(url):
+        """Asynchronous method to fetch a URL"""
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as r:
+                return await r.text()
+
+    @staticmethod
     @lru_cache(maxsize=WIKI_CACHE_LIMIT)
-    def get_wikitext(item):
+    async def get_wikitext(item):
         """Returns the wikitext of the specified item.
 
         This method handles redirects as well.
         """
         item = item.strip()
         url = Controller.WIKI_API_REV_URL + item
-        response = requests.get(url).text
+        response = await Controller.http_get(url)
         try:
             pages = json.loads(response)['query']['pages']
             key = list(pages.keys())[0]
@@ -413,7 +423,7 @@ class Controller:
             while wikitext.startswith('#REDIRECT'):
                 item = re.findall('([^[\]]+)(?:\]|$)', wikitext[len('#REDIRECT'):].strip())[0]
                 url = Controller.WIKI_API_REV_URL + item
-                response = requests.get(url).text
+                response = await Controller.http_get(url) 
                 pages = json.loads(response)['query']['pages']
                 key = list(pages.keys())[0]
                 wikitext = pages[key]['revisions'][0]['slots']['main']['*']
@@ -456,10 +466,10 @@ class Controller:
                 })
 
     @staticmethod
-    def canonical_title(title):
+    async def canonical_title(title):
         """Returns the canonical title for the given title, if found"""
         url = Controller.WIKI_API_SEARCH_URL + title
-        response = requests.get(url).text
+        response = await Controller.http_get(url)
         try:
             pages = json.loads(response)['query']['search']
             if len(pages) == 0:
@@ -470,7 +480,7 @@ class Controller:
 
     @staticmethod
     def link_from_title(title):
-        page_url = f'<https://dayr.fandom.com/wiki/{requests.utils.quote(title)}>'
+        page_url = f'<https://dayr.fandom.com/wiki/{aiohttp.helpers.quote(title)}>'
         return page_url
 
     async def link(self, msg, item=None, *args):
@@ -488,7 +498,7 @@ class Controller:
             return
         if args:
             item = f'{item} {" ".join(args)}'
-        title = Controller.canonical_title(item)
+        title = await Controller.canonical_title(item)
         if title is None:
             await msg.channel.send(**{
                 'content': f'There are no pages matching `{item}`',
@@ -519,7 +529,7 @@ class Controller:
             return
         if args:
             item = f'{item} {" ".join(args)}'
-        canonical = Controller.canonical_title(item)
+        canonical = await Controller.canonical_title(item)
         if canonical:
             item = canonical
         page_url = Controller.link_from_title(item)
@@ -544,7 +554,7 @@ class Controller:
                 })
             return
         try:
-            wikitext = Controller.get_wikitext(item)
+            wikitext = await Controller.get_wikitext(item)
         except ValueError as e:
             # Means the page is not found
             await msg.channel.send(**{
@@ -669,12 +679,12 @@ class Controller:
             return
         if args:
             item = f'{item} {" ".join(args)}'
-        canonical = Controller.canonical_title(item)
+        canonical = await Controller.canonical_title(item)
         if canonical:
             item = canonical
         page_url = Controller.link_from_title(item)
         try:
-            wikitext = Controller.get_wikitext(item)
+            wikitext = await Controller.get_wikitext(item)
         except ValueError as e:
             # Means the page is not found
             await msg.channel.send(**{
@@ -723,12 +733,12 @@ class Controller:
             'mention_author': True,
             })
 
-    def get_trading_table(self):
+    async def get_trading_table(self):
         """Fetch and cache the trading table from wiki
         """
         if self.trading_table is None:
             self.trading_table = {}
-            wikitext = Controller.get_wikitext('Trading')
+            wikitext = await Controller.get_wikitext('Trading')
             for match in re.finditer(r"==== '''([^']+)''' ====\n((?:\*[^\n]+\n)+)", wikitext):
                 place = match.group(1)
                 trade_list = {'into':{}, 'from':{}}
@@ -760,7 +770,7 @@ class Controller:
 
         If the argument is empty, replies the user with the list of possible trading locations
         """
-        trading_table = self.get_trading_table()
+        trading_table = await self.get_trading_table()
         self_delete = False
 
         if not arg:
@@ -860,7 +870,7 @@ class Controller:
                 'delete_after': 3,
                 })
             return
-        image = map_controller.generate_snapshot(include_world=include_world)
+        image = await map_controller.generate_snapshot(include_world=include_world)
         snapshot_id = map_controller.get_id().replace('_', ', ').replace('m', '')
         location_str = f'center at -{snapshot_id}'
         content = f'Here is a snapshot of that location ({location_str}).'
@@ -896,7 +906,7 @@ class Controller:
 
             if Guard.has_permission(msg, 'attach_files'):
                 # If can post image, post the snapshot too
-                image = map_controller.generate_snapshot(include_world=True)
+                image = await map_controller.generate_snapshot(include_world=True)
                 response['file'] = discord.File(image, filename=f'snapshot_{map_controller.get_id()}.png')
             await msg.channel.send(**response)
         else:
@@ -1003,13 +1013,44 @@ class Controller:
         """
         if regex is None:
             return
+        Controller.prev_regex = Controller.KEY_REGEX
+        Controller.prev_help = Controller.HELP_KEY
         Controller.KEY_REGEX = Controller.KEY_REGEX_TEMPLATE.replace('##TEMPLATE##', regex)
         if help_key is None:
             help_key = regex
         Controller.HELP_KEY = help_key
         content = f'Additional trigger phrase updated to `{regex}`, and help key to `{help_key}`.\n'
+        content = f'{content}Send me the `confirm` command within 5s to confirm the change.'
         await msg.channel.send(**{
             'content': content,
+            'reference': msg.to_reference(),
+            'mention_author': True,
+            })
+        await sleep(5)
+        if Controller.prev_regex is None:
+            return
+        Controller.KEY_REGEX = Controller.prev_regex
+        Controller.HELP_KEY = Controller.prev_help
+        await msg.channel.send(**{
+            'content': 'No command received within the confirmation duration, reverting',
+            'reference': msg.to_reference(),
+            'mention_author': True,
+            })
+
+    @privileged
+    async def confirm(self, msg, *args):
+        """Confirms the set_key command"""
+        if Controller.prev_regex is None:
+            await msg.channel.send(**{
+                'content': 'No key change in progress',
+                'reference': msg.to_reference(),
+                'mention_author': True,
+                })
+            return
+        Controller.prev_regex = None
+        Controller.prev_help = None
+        await msg.channel.send(**{
+            'content': 'Key change confirmed',
             'reference': msg.to_reference(),
             'mention_author': True,
             })
@@ -1033,6 +1074,8 @@ class Controller:
         """Send some status about the bots
         """
         content = f'Start time: {self.start_time}\n'
+        content = f'{content}KEY_REGEX: {Controller.KEY_REGEX}\n'
+        content = f'{content}HELP_KEY: {Controller.HELP_KEY}\n'
         content = f'{content}State: {guard.state}\n'
         content = f'{content}SUDO_IDS: {Guard.SUDO_IDS}\n'
         content = f'{content}SUDO_CHANNELS: {Guard.SUDO_CHANNELS}\n'
@@ -1154,7 +1197,7 @@ async def on_message(message):
         for idx, match in enumerate(matches):
             map_controller = MapController.from_match(match)
             logging.info(f'Generating image for {map_controller}')
-            image = map_controller.generate_snapshot()
+            image = await map_controller.generate_snapshot()
             snapshot_id = map_controller.get_id().replace('_', ', ')
             if snapshot_id[0] == 'm':
                 location_str = f'marker at -{snapshot_id[1:]}'
