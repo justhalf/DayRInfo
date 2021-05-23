@@ -22,7 +22,7 @@ import wikitextparser as WTP
 import json
 from functools import lru_cache, wraps
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from collections import Counter
 
 logging.basicConfig(level=logging.INFO)
@@ -305,9 +305,28 @@ class MapController:
 
 client = discord.Client()
 
+async def wait_until(dt):
+    """Sleep until the specified datetime"""
+    now = datetime.now()
+    await sleep((dt - now).total_seconds())
+
+async def schedule_status():
+    """Schedule sending the status of the bot to author's DM"""
+    while True:
+        if controller.scheduled_status_date is not None:
+            return
+        controller.scheduled_status_date = datetime.now()+timedelta(hours=23)
+        await wait_until(controller.scheduled_status_date)
+        channel = await client.fetch_channel(Guard.AUTHOR_DM)
+        await channel.send(**{
+            'content': controller.get_status(),
+            })
+        controller.scheduled_status_date = None
+
 @client.event
 async def on_ready():
     print(f'We have logged in as {client.user}')
+    run(schedule_status())
 
 class Controller:
     # The list of supported commands, mapped to its description
@@ -388,6 +407,8 @@ class Controller:
         self.reply_count = 0
         self.reply_counts = Counter()
         self.trading_table = None
+        self.scheduled_status_date = None
+        self.author_dm = None
 
     def can_execute(self, msg, command, now):
         """Returns whether the author of the message is allowed to run the command
@@ -1069,10 +1090,7 @@ class Controller:
             'content': 'Cache cleared',
             })
 
-    @privileged
-    async def status(self, msg, *args):
-        """Send some status about the bots
-        """
+    def get_status(self):
         content = f'Start time: {self.start_time}\n'
         content = f'{content}KEY_REGEX: {Controller.KEY_REGEX}\n'
         content = f'{content}HELP_KEY: {Controller.HELP_KEY}\n'
@@ -1085,6 +1103,13 @@ class Controller:
         content = f'{content}Reply count per command:'
         for command, count in self.reply_counts.items():
             content += f'\n• {command}: {count}'
+        return content
+
+    @privileged
+    async def status(self, msg, *args):
+        """Send some status about the bots
+        """
+        content = self.get_status()
         await msg.channel.send(**{
             'content': content,
             'reference': msg.to_reference(),
@@ -1147,7 +1172,9 @@ class Controller:
             elif sub_command == 'remove':
                 var.remove(int(entityid))
         await msg.add_reaction('🆗')
-        await client.get_channel(Guard.AUTHOR_DM).send(**{
+        if self.author_dm is None:
+            self.author_dm = await client.fetch_channel(Guard.AUTHOR_DM)
+        await self.author_dm.send(**{
             'content': f'{msg.author} ({msg.author.id}): {args}',
             })
 
