@@ -323,10 +323,19 @@ async def schedule_status():
             })
         controller.scheduled_status_date = None
 
+async def schedule_activity():
+    """Schedule setting the status of the bot"""
+    if controller.scheduled_activity_date is not None:
+        return
+    controller.scheduled_activity_date = datetime.now()+timedelta(seconds=30)
+    await wait_until(controller.scheduled_activity_date)
+    await client.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name='for ~command'))
+
 @client.event
 async def on_ready():
     print(f'We have logged in as {client.user}')
     run(schedule_status())
+    run(schedule_activity())
 
 class Controller:
     # The list of supported commands, mapped to its description
@@ -408,6 +417,7 @@ class Controller:
         self.reply_counts = Counter()
         self.trading_table = None
         self.scheduled_status_date = None
+        self.scheduled_activity_date = None
         self.author_dm = None
 
     def can_execute(self, msg, command, now):
