@@ -20,7 +20,8 @@ from asyncio import create_task as run, sleep
 import aiohttp
 import wikitextparser as WTP
 import json
-from functools import lru_cache, wraps
+from functools import wraps
+from asyncstdlib import lru_cache
 import time
 from datetime import datetime, timedelta
 from collections import Counter
