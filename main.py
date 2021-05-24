@@ -506,6 +506,9 @@ class Controller:
             pages = json.loads(response)['query']['search']
             if len(pages) == 0:
                 return None
+            for page in pages:
+                if page['title'].lower() == title.lower():
+                    return page['title']
             return pages[0]['title']
         except:
             return None
