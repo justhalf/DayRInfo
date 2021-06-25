@@ -383,7 +383,8 @@ class Controller:
         match = re.match(Controller.KEY_REGEX, msg.content)
         full_command = msg.content[match.end(1):].strip()
 
-        full_command = re.findall('(?<=")[^"]+(?=")|[^" ]+', full_command)
+        full_command = re.findall(r'(?:")[^"]+(?:")|[^" ]+', full_command)
+        full_command = [token.strip('"') for token in full_command]
         if len(full_command) == 0:
             command = 'help'
             args = []
