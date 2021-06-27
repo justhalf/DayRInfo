@@ -1101,6 +1101,7 @@ class Controller:
         """Clears the cache
         """
         Controller.get_wikitext.cache_clear()
+        self.trading_table = None
         await msg.channel.send(**{
             'content': 'Cache cleared',
             })
