@@ -834,7 +834,7 @@ class Controller:
                 from_list = []
                 into_list = []
                 for place, trade_lists in trading_table.items():
-                    aliases = [item.lower(), item+'s'.lower(), item[:-1].lower() if item[-1] == 's' else '']
+                    aliases = [item.lower(), item+'s'.lower(), item[:-1].lower() if item[-1] == 's' else '', item+' metal']
                     for alias in aliases:
                         if not alias:
                             continue
