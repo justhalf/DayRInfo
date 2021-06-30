@@ -775,11 +775,13 @@ class Controller:
         if self.trading_table is None:
             self.trading_table = {}
             wikitext = await Controller.get_wikitext('Trading')
-            for match in re.finditer(r"==== '''([^']+)''' ====\n((?:\*[^\n]+\n)+)", wikitext):
+            for match in re.finditer(r"===='''([^']+)'''====\n({\|\n(?:[^\n]*\n)+?\|})", wikitext):
                 place = match.group(1)
                 trade_list = {'into':{}, 'from':{}}
-                for row in match.group(2).strip().split('\n'):
-                    trade = re.search(r'\* ([0-9,.]+) \[\[(?:[^|]+\|)?([^\]]+)\]\][ ]*->[ ]*([0-9,.]+) \[\[(?:[^|]+\|)?([^\]]+)\]\]', row)
+                for row in match.group(2).strip().split('|-'):
+                    if len(row) < 5:
+                        continue
+                    trade = re.search(r'\|([0-9,.]+)\|\| \[\[(?:[^|\]]+\|)?([^\]]+)\]\]\|\|→\n\|align\=right\|([0-9,.]+)\|\| \[\[(?:[^|\]]+\|)?([^\]]+)\]\]', row)
                     if not trade:
                         logging.warn(f'No trade row in `{row}`')
                         continue
@@ -834,7 +836,7 @@ class Controller:
                 from_list = []
                 into_list = []
                 for place, trade_lists in trading_table.items():
-                    aliases = [item.lower(), item+'s'.lower(), item[:-1].lower() if item[-1] == 's' else '', item+' metal']
+                    aliases = [item.lower(), item+'s'.lower(), item[:-1].lower() if item[-1] == 's' else '', item+' metal', 'sulfuric '+item]
                     for alias in aliases:
                         if not alias:
                             continue
