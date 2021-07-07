@@ -775,7 +775,7 @@ class Controller:
         if self.trading_table is None:
             self.trading_table = {}
             wikitext = await Controller.get_wikitext('Trading')
-            for match in re.finditer(r"===='''([^']+)'''====\n({\|\n(?:[^\n]*\n)+?\|})", wikitext):
+            for match in re.finditer(r"===='''([^']+)'''====\n({\|[^\n]*\n(?:[^\n]*\n)+?\|})", wikitext):
                 place = match.group(1)
                 trade_list = {'into':{}, 'from':{}}
                 for row in match.group(2).strip().split('|-'):
@@ -783,8 +783,10 @@ class Controller:
                         continue
                     trade = re.search(r'\|([0-9,.]+)\|\| \[\[(?:[^|\]]+\|)?([^\]]+)\]\]\|\|→\n\|align\=right\|([0-9,.]+)\|\| \[\[(?:[^|\]]+\|)?([^\]]+)\]\]', row)
                     if not trade:
-                        logging.warn(f'No trade row in `{row}`')
-                        continue
+                        trade = re.search(r'\| ?([0-9,.]+) \[\[(?:[^|\]]+\|)?([^\]]+)\]\]\|\| ?([0-9,.]+) \[\[(?:[^|\]]+\|)?([^\]]+)\]\]', row)
+                        if not trade:
+                            logging.warn(f'No trade row in `{row}`')
+                            continue
                     from_amt = int(trade.group(1).replace(',', ''))
                     from_itm = trade.group(2).lower()
                     to_amt = int(trade.group(3).replace(',', ''))
