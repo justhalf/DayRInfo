@@ -823,15 +823,18 @@ class Controller:
             place_aliases = [arg.lower(), f'{arg.lower()} (fitter)', f'{arg.lower()} (trader)']
             content = ''
             for place in place_aliases:
-                if place in trading_table:
-                    # A location name
-                    trade_list = []
-                    for from_itm, to_list in trading_table[place.lower()]['from'].items():
-                        for to_itm, from_amt, to_amt in to_list:
-                            trade_list.append(f'• With **{from_amt} {from_itm}**, you get **{to_amt} {to_itm}**')
-                    if content:
-                        content += '\n\n'
-                    content += f'Trading in {place.capitalize()}:\n'+'\n'.join(trade_list)
+                if len(place) <= 2:
+                    continue
+                for location_name in trading_table:
+                    if place.lower() in location_name.lower() and len(place)*2 >= len(location_name):
+                        # A location name
+                        trade_list = []
+                        for from_itm, to_list in trading_table[location_name]['from'].items():
+                            for to_itm, from_amt, to_amt in to_list:
+                                trade_list.append(f'• With **{from_amt} {from_itm}**, you get **{to_amt} {to_itm}**')
+                        if content:
+                            content += '\n\n'
+                        content += f'Trading in {place.capitalize()}:\n'+'\n'.join(trade_list)
             if not content:
                 # An item name or not found
                 item = arg
