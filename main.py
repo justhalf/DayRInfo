@@ -1288,8 +1288,8 @@ class Controller:
                     })
                 guild = await client.fetch_guild(Guard.GUILD_ID)
                 member = await guild.fetch_member(message.author.id)
-                await member.remove_roles([396020969258483713]) # Remove "Unverified Wastelander"
-                await member.add_roles([673729630230020106])    # Add "Wastelander"
+                await member.remove_roles(396020969258483713) # Remove "Unverified Wastelander"
+                await member.add_roles(673729630230020106)    # Add "Wastelander"
                 await member.edit(nick=data['name'],   # Set nickname based on in-game name
                                   reason='Verified')
         except:
