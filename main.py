@@ -67,6 +67,7 @@ class Guard:
 
     BANNED_USERS = set()
 
+    GUILD_ID = 396019800855281665
     VERIFICATION_CHANNEL = 889524031462735962
     VERIFY_COMMAND = '!verify'
 
@@ -1257,7 +1258,7 @@ class Controller:
             match = re.search('(a_|g)[0-9]{18,}', text)
             if match:
                 account_id = match.group(0)
-            match = re.search('User:[ ]*([0-9]{7,})', text)
+            match = re.search(':[ ]*([0-9]{7,})', text)
             if match:
                 user_id = match.group(1)
             if not user_id or not account_id:
@@ -1283,8 +1284,14 @@ class Controller:
                 logging.info(f'Verification success for {data["name"]}')
                 await orig_message.add_reaction('✅')
                 await message.author.send(**{
-                    'content': 'Automatic verification success!',
+                    'content': 'Automatic verification success! Welcome to Day R International Community!',
                     })
+                guild = await client.fetch_guild(Guard.GUILD_ID)
+                member = await guild.fetch_member(message.author.id)
+                await member.remove_roles([396020969258483713]) # Remove "Unverified Wastelander"
+                await member.add_roles([673729630230020106])    # Add "Wastelander"
+                await member.edit(nick=data['name'],   # Set nickname based on in-game name
+                                  reason='Verified')
         except:
             raise
             logging.info(f'Error while doing verification')
