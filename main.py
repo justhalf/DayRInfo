@@ -1276,6 +1276,11 @@ class Controller:
                     })
         except:
             raise
+            logging.info(f'Error while doing verification')
+            await orig_message.add_reaction('❓')
+            await message.author.send(**{
+                'content': 'Error while doing verification. Please contact Discord Moderator',
+                })
 
 controller = Controller()
 
