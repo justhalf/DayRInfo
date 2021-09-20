@@ -58,6 +58,7 @@ class State:
 class Guard:
     AUTHOR = None
     AUTHOR_DM = None
+    MOD_KEY = None
 
     SUDO_IDS = set()
     SUDO_CHANNELS = set()
@@ -1234,10 +1235,23 @@ class Controller:
     
     async def verify2(self, message):
         try:
+            orig_message_id = int(message.reference.cached_message.content.split('\n')[-1].strip())
+            channel = await client.fetch_channel(Guard.VERIFICATION_CHANNEL)
+            orig_message = await channel.fetch_message(orig_message_id)
+        except:
+            content = 'Error in verification. Have you **replied** to my message? If so, then this is an error.'
+            content = f'{content} Please contact Discord Moderator'
+            await message.author.send(**{
+                'content': content,
+                })
+            return
+        try:
             image_url = message.attachments[0].url
             async with aiohttp.ClientSession() as session:
                 async with session.get(image_url) as r:
                     image = Image.open(BytesIO(await r.read()))
+            fn = lambda x: 255 if x>100 else 0
+            image = image.convert('L').point(fn, mode='1')
             text = pytesseract.image_to_string(image)
             account_id, user_id = None, None
             match = re.search('(a_|g)[0-9]{18,}', text)
@@ -1254,14 +1268,11 @@ class Controller:
                     'content': 'Automatic verification failed. Please contact Discord Moderator',
                     })
                 return
-            URL = 'http://auth.tltgames.net/search/id/{}/None'
+            URL = 'http://auth.tltgames.net/search/id/{}/'+Guard.MOD_KEY
             url = URL.format(user_id)
             async with aiohttp.ClientSession() as session:
                 async with session.get(url) as r:
                     data = json.loads(await r.text())
-            orig_message_id = int(message.reference.cached_message.content.split('\n')[-1].strip())
-            channel = await client.fetch_channel(Guard.VERIFICATION_CHANNEL)
-            orig_message = await channel.fetch_message(orig_message_id)
             if account_id != data['account_uid']:
                 logging.info('Verification failed')
                 await orig_message.add_reaction('❌')
@@ -1371,9 +1382,12 @@ def main(args=None):
             Guard.AUTHOR = int(infile.read().strip())
         with open('author_dm.txt', 'r') as infile:
             Guard.AUTHOR_DM= int(infile.read().strip())
+        with open('mod_key.txt', 'r') as infile:
+            Guard.MOD_KEY = infile.read().strip()
     except:
         Guard.AUTHOR = int(os.environ.get('AUTHOR'))
         Guard.AUTHOR_DM = int(os.environ.get('AUTHOR_DM'))
+        Guard.MOD_KEY= os.environ.get('MOD_KEY')
     Guard.SUDO_IDS.add(Guard.AUTHOR)
     try:
         # Map all location names (in all languages) into their lat, lng and size (for name collision handling)
