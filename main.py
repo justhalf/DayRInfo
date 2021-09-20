@@ -1283,8 +1283,10 @@ class Controller:
             else:
                 logging.info(f'Verification success for {data["name"]}')
                 await orig_message.add_reaction('✅')
+                content = 'Automatic verification success! Welcome to Day R International Community!'
+                content = f'{content}\nIf you are not given the role Wastelander in a few minutes, contact Discord Moderator'
                 await message.author.send(**{
-                    'content': 'Automatic verification success! Welcome to Day R International Community!',
+                    'content': content,
                     })
                 guild = await client.fetch_guild(Guard.GUILD_ID)
                 member = await guild.fetch_member(message.author.id)
