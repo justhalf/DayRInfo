@@ -25,6 +25,7 @@ from asyncstdlib import lru_cache
 import time
 from datetime import datetime, timedelta
 from collections import Counter
+import pytesseract
 
 logging.basicConfig(level=logging.INFO)
 
@@ -64,6 +65,9 @@ class Guard:
     TRUSTED_ROLES = set(['Verification Tier Level 2'])
 
     BANNED_USERS = set()
+
+    VERIFICATION_CHANNEL = 889524031462735962
+    VERIFY_COMMAND = '!verify'
 
     def __init__(self, state=State.NORMAL):
         """Initializes a guard to check user privilege"""
@@ -120,11 +124,25 @@ class Intent:
     DIRECT = 'Direct'
     MAP = 'Map'
     NONE = 'None'
+    VERIFY1 = 'Verify1'
+    VERIFY2 = 'Verify2'
+
+    BAD_COMMAND = 'Bad command'
 
     @staticmethod
     def get_intent(msg):
         """Returns the intent of the message, as defined by the Intent class
         """
+        try:
+            if msg.reference.cached_message.author == client.user and msg.reference.cached_message.content[:3] == 'Hi!':
+                return Intent.VERIFY2
+        except:
+            pass
+        if msg.channel.id == Guard.VERIFICATION_CHANNEL:
+            if msg.content.strip() == Guard.VERIFY_COMMAND:
+                return Intent.VERIFY1
+            else:
+                return Intent.BAD_COMMAND
         if re.search(MapController.MAP_REGEX, msg.content) and client.user.id in msg.raw_mentions:
             return Intent.MAP
         elif re.match(Controller.KEY_REGEX, msg.content):
@@ -1201,6 +1219,64 @@ class Controller:
             'content': f'{msg.author} ({msg.author.id}): {args}',
             })
 
+    async def verify1(self, message):
+        user = message.author
+        content = f'Hi! You are starting the verification process to join Day R International Community.'
+        content = f'{content}\nAll you need to do is **send me a screenshot of your Profile page by using the reply feature on my message**.'
+        content = f'{content}\nYour Profile page can be seen by pausing the game, selecting Main Menu, then Profile.'
+        content = f'{content}\nThe Profile page will show up to three save slots, and account details at the bottom.'
+        content = f'{content}\nIf verification succeed, you will be given the role Wastelander, and your nickname'
+        content = f'{content} will be set to your in-game name.'
+        content = f'{content}\n{message.id}'
+        await user.send(**{
+            'content': content,
+            })
+    
+    async def verify2(self, message):
+        try:
+            image_url = message.attachments[0].url
+            async with aiohttp.ClientSession() as session:
+                async with session.get(image_url) as r:
+                    image = Image.open(BytesIO(await r.read()))
+            text = pytesseract.image_to_string(image)
+            account_id, user_id = None, None
+            match = re.search('(a_|g)[0-9]{18,}', text)
+            if match:
+                account_id = match.group(0)
+            match = re.search('User:[ ]*([0-9]{7,})', text)
+            if match:
+                user_id = match.group(1)
+            if not user_id or not account_id:
+                logging.warn(text)
+                logging.info('Verification failed')
+                await orig_message.add_reaction('❌')
+                await message.author.send(**{
+                    'content': 'Automatic verification failed. Please contact Discord Moderator',
+                    })
+                return
+            URL = 'http://auth.tltgames.net/search/id/{}/None'
+            url = URL.format(user_id)
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as r:
+                    data = json.loads(await r.text())
+            orig_message_id = int(message.reference.cached_message.content.split('\n')[-1].strip())
+            channel = await client.fetch_channel(Guard.VERIFICATION_CHANNEL)
+            orig_message = await channel.fetch_message(orig_message_id)
+            if account_id != data['account_uid']:
+                logging.info('Verification failed')
+                await orig_message.add_reaction('❌')
+                await message.author.send(**{
+                    'content': 'Automatic verification failed. Please contact Discord Moderator',
+                    })
+            else:
+                logging.info(f'Verification success for {data["name"]}')
+                await orig_message.add_reaction('✅')
+                await message.author.send(**{
+                    'content': 'Automatic verification success!',
+                    })
+        except:
+            raise
+
 controller = Controller()
 
 @client.event
@@ -1229,7 +1305,13 @@ async def on_message(message):
                  +f'.\tAt {message.created_at}'))
     intent = Intent.get_intent(message)
     logging.info(f'Intent: {intent}')
-    if intent == Intent.DIRECT:
+    if intent == Intent.VERIFY1:
+        await controller.verify1(message)
+    elif intent == Intent.VERIFY2:
+        await controller.verify2(message)
+    elif intent == Intent.BAD_COMMAND:
+        await message.delete()
+    elif intent == Intent.DIRECT:
         command, args = controller.get_args(message)
         logging.info(f'Command: {command}, args: {args}')
         await controller.execute(message, command, args)
