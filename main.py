@@ -1230,8 +1230,8 @@ class Controller:
         Syntax: verify user_id account_uid"""
         if len(args) < 2:
             return
-        user_id = args[1]
-        account_uid = args[2]
+        user_id = args[0]
+        account_uid = args[1]
         URL = 'http://auth.tltgames.net/search/id/{}/'+Guard.MOD_KEY
         url = URL.format(user_id)
         async with aiohttp.ClientSession() as session:
