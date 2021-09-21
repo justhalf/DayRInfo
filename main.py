@@ -136,8 +136,15 @@ class Intent:
         """Returns the intent of the message, as defined by the Intent class
         """
         try:
-            if msg.reference.cached_message.author == client.user and msg.reference.cached_message.content[:3] == 'Hi!':
-                return Intent.VERIFY2
+            if (msg.reference.cached_message.author == client.user and 
+                    msg.reference.cached_message.content.startswith('Hi! You')):
+                orig_message_id = int(msg.reference.cached_message.content.split('\n')[-1])
+                channel = await client.fetch_channel(Guard.VERIFICATION_CHANNEL)
+                orig_message = await channel.fetch_message(orig_message_id)
+                if orig_message.content.strip() == Guard.VERIFY_COMMAND and len(orig_message.reactions) == 0:
+                    return Intent.VERIFY2
+                else:
+                    return Intent.BAD_COMMAND
         except:
             pass
         if msg.channel.id == Guard.VERIFICATION_CHANNEL:
@@ -382,6 +389,7 @@ class Controller:
             'restate': ('[Normal|Trusted|Sudo]', '🛠️ Change the state of the bot', False, 3),
             'manage': ('[add|remove] [BANNED_USERS|TRUSTED_ROLES|SUDO_IDS|SUDO_CHANNELS] ENTITYID (ENTITYID)*',
                        '🔒 Manage the sudo list and trusted roles', False, 3),
+            'verify': ('user_id account_id', '👮 Verify a user', False, 3),
             }
 
     # The regex to detect messages starting with a mention to this bot
@@ -1221,6 +1229,31 @@ class Controller:
             'content': f'{msg.author} ({msg.author.id}): {args}',
             })
 
+    @privileged
+    async def verify(self, msg, *args):
+        """Verify an account based on account UID and user ID
+
+        Syntax: verify user_id account_uid"""
+        if len(args) < 2:
+            return
+        user_id = args[1]
+        account_uid = args[2]
+        URL = 'http://auth.tltgames.net/search/id/{}/'+Guard.MOD_KEY
+        url = URL.format(user_id)
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as r:
+                data = json.loads(await r.text())
+        if account_uid != data['account_uid']:
+            await msg.channel.send(**{
+                'content': 'Verification failed',
+                'reference': msg.to_reference(),
+                })
+        else:
+            await msg.channel.send(**{
+                'content': f'Verification success. In-game name: {data["name"]}',
+                'reference': msg.to_reference(),
+                })
+
     async def verify1(self, message):
         user = message.author
         content = f'Hi! You are starting the verification process to join Day R International Community.'
@@ -1335,7 +1368,10 @@ async def on_message(message):
     elif intent == Intent.VERIFY2:
         await controller.verify2(message)
     elif intent == Intent.BAD_COMMAND:
-        await message.delete()
+        try:
+            await message.delete()
+        except:
+            pass
     elif intent == Intent.DIRECT:
         command, args = controller.get_args(message)
         logging.info(f'Command: {command}, args: {args}')
