@@ -1238,13 +1238,15 @@ class Controller:
             async with session.get(url) as r:
                 data = json.loads(await r.text())
         if account_uid != data['account_uid']:
+            await msg.add_reaction('❌')
             await msg.channel.send(**{
                 'content': 'Verification failed',
                 'reference': msg.to_reference(),
                 })
         else:
+            await msg.add_reaction('✅')
             await msg.channel.send(**{
-                'content': f'Verification success. In-game name: {data["name"]}',
+                'content': f'{data["name"]}',
                 'reference': msg.to_reference(),
                 })
 
