@@ -138,13 +138,7 @@ class Intent:
         try:
             if (msg.reference.cached_message.author == client.user and 
                     msg.reference.cached_message.content.startswith('Hi! You')):
-                orig_message_id = int(msg.reference.cached_message.content.split('\n')[-1])
-                channel = await client.fetch_channel(Guard.VERIFICATION_CHANNEL)
-                orig_message = await channel.fetch_message(orig_message_id)
-                if orig_message.content.strip() == Guard.VERIFY_COMMAND and len(orig_message.reactions) == 0:
-                    return Intent.VERIFY2
-                else:
-                    return Intent.BAD_COMMAND
+                return Intent.VERIFY2
         except:
             pass
         if msg.channel.id == Guard.VERIFICATION_CHANNEL:
@@ -1273,6 +1267,15 @@ class Controller:
             channel = await client.fetch_channel(Guard.VERIFICATION_CHANNEL)
             orig_message = await channel.fetch_message(orig_message_id)
         except:
+            content = 'Error in verification. Have you **replied** to my message? If so, then this is an error.'
+            content = f'{content} Please contact Discord Moderator'
+            await message.author.send(**{
+                'content': content,
+                })
+            return
+        if orig_message.content.strip() == Guard.VERIFY_COMMAND and len(orig_message.reactions) == 0:
+            pass
+        else:
             content = 'Error in verification. Have you **replied** to my message? If so, then this is an error.'
             content = f'{content} Please contact Discord Moderator'
             await message.author.send(**{
