@@ -394,6 +394,11 @@ class Controller:
     prev_regex = None
     prev_help = None
 
+    # Some Discord objects
+    guild = None
+    unverified_role = None
+    wastelander_role = None
+
     # The URL to wiki API
     WIKI_API_REV_URL = 'https://dayr.fandom.com/api.php?action=query&prop=revisions&rvprop=content&format=json&rvslots=main&titles='
     WIKI_API_SEARCH_URL = 'https://dayr.fandom.com/api.php?action=query&list=search&utf8=&format=json&srlimit=3&srprop=timestamp&srsearch='
@@ -807,7 +812,7 @@ class Controller:
                     if not trade:
                         trade = re.search(r'\| ?([0-9,.]+) \[\[(?:[^|\]]+\|)?([^\]]+)\]\]\|\| ?([0-9,.]+) \[\[(?:[^|\]]+\|)?([^\]]+)\]\]', row)
                         if not trade:
-                            logging.warn(f'No trade row in `{row}`')
+                            logging.warning(f'No trade row in `{row}`')
                             continue
                     from_amt = int(trade.group(1).replace(',', ''))
                     from_itm = trade.group(2).lower()
@@ -1262,6 +1267,7 @@ class Controller:
         await user.send(**{
             'content': content,
             })
+        await message.add_reaction('❓')
     
     async def verify2(self, message):
         try:
@@ -1275,7 +1281,8 @@ class Controller:
                 'content': content,
                 })
             return
-        if orig_message.content.strip() == Guard.VERIFY_COMMAND and len(orig_message.reactions) == 0:
+        if (orig_message.content.strip() == Guard.VERIFY_COMMAND and
+                (len(orig_message.reactions) == 0 or orig_message.reactions[0].emoji=='❓')):
             pass
         else:
             content = 'Error in verification. Have you **replied** to my message? If so, then this is an error.'
@@ -1289,53 +1296,78 @@ class Controller:
             async with aiohttp.ClientSession() as session:
                 async with session.get(image_url) as r:
                     image = Image.open(BytesIO(await r.read()))
-            fn = lambda x: 255 if x>100 else 0
+            fn = lambda x: 0 if x>100 else 255
             image = image.convert('L').point(fn, mode='1')
-            text = pytesseract.image_to_string(image)
+            text = pytesseract.image_to_string(image, config='-c tessedit_char_whitelist=ag_:0123456789 --psm 6')
+            text = re.sub(r'[|/]', '1', text)
+            print(text)
             account_id, user_id = None, None
-            match = re.search('(a_|g)[0-9]{18,}', text)
+            match = re.search('(a_|g|9)(?:[0-9] ?){18,}', text)
+            idx = 0
             if match:
                 account_id = match.group(0)
-            match = re.search(':[ ]*([0-9]{7,})', text)
+                if account_id[0] == '9':
+                    account_id = 'g'+account_id[1:]
+                    account_id = account_id.replace(' ', '')
+                idx = match.end()
+            match = re.search(':[ ]*((?:[0-9] ?){7,})', text[idx:])
             if match:
                 user_id = match.group(1)
+                user_id = user_id.replace(' ', '')
             if not user_id or not account_id:
-                logging.warn(text)
+                logging.warning(text)
                 logging.info('Verification failed')
                 await orig_message.add_reaction('❌')
                 await message.author.send(**{
                     'content': 'Automatic verification failed. Please contact Discord Moderator',
                     })
                 return
+            logging.info(f'Detected: account_uid={account_id} user_id={user_id}')
             URL = 'http://auth.tltgames.net/search/id/{}/'+Guard.MOD_KEY
             url = URL.format(user_id)
             async with aiohttp.ClientSession() as session:
                 async with session.get(url) as r:
                     data = json.loads(await r.text())
-            if account_id != data['account_uid']:
+            if sum(c1!=c2 for c1, c2 in zip(account_id, data['account_uid'])) <= 3:
+                logging.info(f'Verification success for {data["name"]}')
+                await orig_message.add_reaction('✅')
+                content = f'Automatic verification success! Welcome to Day R International Community!'
+                content = f'{content}\nYour Discord name will be set to {data["name"]}.'
+                content = f'{content}\nIf you are not given the role Wastelander in a few minutes, contact Discord Moderator'
+                await message.author.send(**{
+                    'content': content,
+                    })
+                if self.guild is None:
+                    self.guild = await client.fetch_guild(Guard.GUILD_ID)
+                member = await self.guild.fetch_member(message.author.id)
+                if self.unverified_role is None:
+                    for role in self.guild.roles:
+                        if role.id == 396020969258483713:
+                            self.unverified_role = role
+                            break
+                if self.wastelander_role is None:
+                    for role in self.guild.roles:
+                        if role.id == 673729630230020106:
+                            self.wastelander_role = role
+                            break
+                await member.add_roles(self.wastelander_role)    # Add "Wastelander"
+                await member.edit(nick=data['name'],   # Set nickname based on in-game name
+                                  reason='Verified')
+                await member.remove_roles(self.unverified_role) # Remove "Unverified Wastelander"
+                await orig_message.remove_reaction('❓', client.user)
+                await orig_message.channel.send(**{
+                    'content': data['name'],
+                    'reference': orig_message.to_reference(),
+                    })
+            else:
                 logging.info('Verification failed')
                 await orig_message.add_reaction('❌')
                 await message.author.send(**{
                     'content': 'Automatic verification failed. Please contact Discord Moderator',
                     })
-            else:
-                logging.info(f'Verification success for {data["name"]}')
-                await orig_message.add_reaction('✅')
-                content = 'Automatic verification success! Welcome to Day R International Community!'
-                content = f'{content}\nIf you are not given the role Wastelander in a few minutes, contact Discord Moderator'
-                await message.author.send(**{
-                    'content': content,
-                    })
-                guild = await client.fetch_guild(Guard.GUILD_ID)
-                member = await guild.fetch_member(message.author.id)
-                await member.remove_roles(396020969258483713) # Remove "Unverified Wastelander"
-                await member.add_roles(673729630230020106)    # Add "Wastelander"
-                await member.edit(nick=data['name'],   # Set nickname based on in-game name
-                                  reason='Verified')
         except:
             raise
             logging.info(f'Error while doing verification')
-            await orig_message.add_reaction('❓')
             await message.author.send(**{
                 'content': 'Error while doing verification. Please contact Discord Moderator',
                 })
