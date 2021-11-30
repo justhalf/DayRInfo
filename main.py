@@ -1297,6 +1297,8 @@ def main(args=None):
             size = location['properties']['size']
             for name in location['properties']['name'].values():
                 name = name.lower()
+                if '<br>' in name:
+                    name = name.split('<br>/ ')[-1]
                 if name not in MapController.locations or size > MapController.locations[name][2]:
                     MapController.locations[name] = (lat, lng, size)
     except:
