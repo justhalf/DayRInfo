@@ -363,7 +363,7 @@ class Controller:
             'clear_cache': ('', '🧹 Clear the cache', False, 3),
             'status': ('', 'ℹ️ Show the status of the bot', False, 3),
             'restate': ('[Normal|Trusted|Sudo]', '🛠️ Change the state of the bot', False, 3),
-            'manage': ('[add|remove] [BANNED_USERS|TRUSTED_ROLES|SUDO_IDS|SUDO_CHANNELS] ENTITYID (ENTITYID)*',
+            'manage': ('[add|remove] [BANNED_USERS|TRUSTED_USERS|TRUSTED_ROLES|SUDO_IDS|SUDO_CHANNELS] ENTITYID (ENTITYID)*',
                        '🔒 Manage the sudo list and trusted roles', False, 3),
             }
 
