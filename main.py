@@ -778,33 +778,25 @@ class Controller:
         if self.trading_table is None:
             self.trading_table = {}
             wikitext = await Controller.get_wikitext('Trading')
-            for match in re.finditer(r"===='''([^']+)'''====\n({\|[^\n]*\n(?:[^\n]*\n)+?\|})", wikitext):
-                place = match.group(1)
-                trade_list = {'into':{}, 'from':{}}
-                for row in match.group(2).strip().split('|-'):
-                    if len(row) < 5:
-                        continue
-                    trade = re.search(r'\|([0-9,.]+)\|\| \[\[(?:[^|\]]+\|)?([^\]]+)\]\]\|\|→\n\|align\=right\|([0-9,.]+)\|\| \[\[(?:[^|\]]+\|)?([^\]]+)\]\]', row)
-                    if not trade:
-                        trade = re.search(r'\| ?([0-9,.]+) \[\[(?:[^|\]]+\|)?([^\]]+)\]\]\|\| ?([0-9,.]+) \[\[(?:[^|\]]+\|)?([^\]]+)\]\]', row)
-                        if not trade:
-                            logging.warn(f'No trade row in `{row}`')
-                            continue
-                    from_amt = int(trade.group(1).replace(',', ''))
-                    from_itm = trade.group(2).lower()
-                    to_amt = int(trade.group(3).replace(',', ''))
-                    to_itm = trade.group(4).lower()
-                    if from_itm not in trade_list['from']:
-                        trade_list['from'][from_itm] = []
-                    if to_itm not in trade_list['into']:
-                        trade_list['into'][to_itm] = []
-                    trade_list['from'][from_itm].append((to_itm, from_amt, to_amt))
-                    trade_list['into'][to_itm].append((from_itm, to_amt, from_amt))
-                if '(' in place:
-                    # Gorenichi (Kiev), Magnitogorsk (trader), Magnitogorsk (fitter)
-                    if place[0] == 'G':
-                        place = 'Kiev'
-                self.trading_table[place.lower()] = trade_list
+            wikilines = wikitext.split('\n')
+            start_line = 0
+            for idx, line in enumerate(wikilines):
+                if 'Full Trading Table' in line:
+                    start_line = idx
+                    break
+            wikitext = '\n'.join(wikilines[idx+1:])
+            for row in wikitext.split('|-')[1:-1]:
+                try:
+                    icon, base_name, item, price, _, currency, stock, min_level = row.split('||')
+                    base_name = base_name.lower()
+                    if base_name not in self.trading_table:
+                        self.trading_table[base_name] = {}
+                    trade_list = self.trading_table[base_name]
+                    item_name = item.split(']]')[1].strip()
+                    trade_list[item_name.lower()] = (item_name, int(price), currency, int(stock), int(min_level))
+                except:
+                    print(row)
+                    raise
         return self.trading_table
 
     async def trader(self, msg, arg=None, *args):
@@ -823,44 +815,31 @@ class Controller:
             if args:
                 arg = f'{arg} {" ".join(args)}'
             # Check for place name
-            place_aliases = [arg.lower(), f'{arg.lower()} (fitter)', f'{arg.lower()} (trader)']
             content = ''
-            for place in place_aliases:
-                if len(place) <= 2:
-                    continue
-                for location_name in trading_table:
-                    if place.lower() in location_name.lower() and len(place)*2 >= len(location_name):
-                        # A location name
-                        trade_list = []
-                        for from_itm, to_list in trading_table[location_name]['from'].items():
-                            for to_itm, from_amt, to_amt in to_list:
-                                trade_list.append(f'• With **{from_amt} {from_itm}**, you get **{to_amt} {to_itm}**')
-                        if content:
-                            content += '\n\n'
-                        content += f'Trading in {place.capitalize()}:\n'+'\n'.join(trade_list)
+            if arg.lower() in trading_table:
+                # A location name
+                trade_list = []
+                for item_name, price, currency, stock, min_level in trading_table[arg.lower()].values():
+                    trade_list.append(f'• **{item_name}** for __{price} {currency}__ (max {stock}), level {min_level}')
+                content += f'Trading in {arg.capitalize()}:\n'+'\n'.join(trade_list)
             if not content:
                 # An item name or not found
                 item = arg
-                from_list = []
-                into_list = []
-                for place, trade_lists in trading_table.items():
+                trade_list = []
+                for base_name, items in trading_table.items():
                     aliases = [item.lower(), item+'s'.lower(), item[:-1].lower() if item[-1] == 's' else '', item+' metal', 'sulfuric '+item]
                     for alias in aliases:
                         if not alias:
                             continue
-                        if alias in trade_lists['from']:
-                            for to_itm, from_amt, to_amt in trade_lists['from'][alias]:
-                                from_list.append(f'• At **{place.capitalize()}** with *{from_amt} {item}*, you get **{to_amt} {to_itm}**')
-                        if alias in trade_lists['into']:
-                            for from_itm, to_amt, from_amt in trade_lists['into'][alias]:
-                                into_list.append(f'• At **{place.capitalize()}** with **{from_amt} {from_itm}**, you get *{to_amt} {item}*')
-                total_list = from_list + into_list
-                if len(total_list) == 0:
+                        if alias in items:
+                            item_name, price, currency, stock, min_level = items[alias]
+                            trade_list.append(f'• At **{base_name.capitalize()}**: {item_name} for {price} {currency} (max {stock}), level {min_level}')
+                if len(trade_list) == 0:
                     content = f'Could not find any trading option for `{item}`'
                     self_delete = True
                 else:
-                    content = f'Places that trades from and into {item}:\n'
-                    content += '\n'.join(total_list)
+                    content = f'Places that sells {item}:\n'
+                    content += '\n'.join(trade_list)
         response = {
                 'content': content,
                 'reference': msg.to_reference(),
