@@ -1179,7 +1179,7 @@ class Controller:
         if sub_command not in ['add', 'remove']:
             return
         var = args[1]
-        if var not in ['BANNED_USERS', 'TRUSTED_ROLES', 'SUDO_IDS', 'SUDO_CHANNELS']:
+        if var not in ['BANNED_USERS', 'TRUSTED_USERS', 'TRUSTED_ROLES', 'SUDO_IDS', 'SUDO_CHANNELS']:
             return
         if var == 'BANNED_USERS':
             var = Guard.BANNED_USERS
