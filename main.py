@@ -62,6 +62,7 @@ class Guard:
     SUDO_CHANNELS = set()
 
     TRUSTED_ROLES = set(['Verification Tier Level 2'])
+    TRUSTED_USERS = set()
 
     BANNED_USERS = set()
 
@@ -98,6 +99,8 @@ class Guard:
             return True
         if author.id in Guard.BANNED_USERS:
             return False
+        if author.id in Guard.TRUSTED_USERS:
+            return True
         try:
             if set([role.name for role in author.roles]).intersection(Guard.TRUSTED_ROLES):
                 return True
@@ -1168,7 +1171,7 @@ class Controller:
     async def manage(self, msg, *args):
         """Manages the guard of this bot
 
-        Syntax: manage [add | remove] [BANNED_USERS | TRUSTED_ROLES | SUDO_IDS | SUDO_CHANNELS] ENTITYID (ENTITYID)*
+        Syntax: manage [add | remove] [BANNED_USERS | TRUSTED_USERS | TRUSTED_ROLES | SUDO_IDS | SUDO_CHANNELS] ENTITYID (ENTITYID)*
         """
         if len(args) < 3:
             return
@@ -1180,6 +1183,8 @@ class Controller:
             return
         if var == 'BANNED_USERS':
             var = Guard.BANNED_USERS
+        elif var == 'TRUSTED_USERS':
+            var = Guard.TRUSTED_USERS
         elif var == 'TRUSTED_ROLES':
             var = Guard.TRUSTED_ROLES
         elif var == 'SUDO_IDS':
