@@ -917,7 +917,7 @@ class Controller:
                             continue
                         for craftable, level in craftables:
                             if alias == craftable.lower():
-                                craft_list.append(f'• {base_name.capitalize()} (at level {level})')
+                                craft_list.append(f'• {base_name.capitalize()} (at workshop level {level})')
                 if len(craft_list) == 0:
                     content = f'Could not find any workshop crafting option for `{item}`'
                     self_delete = True
