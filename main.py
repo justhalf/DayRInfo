@@ -792,8 +792,14 @@ class Controller:
                     if base_name not in self.trading_table:
                         self.trading_table[base_name] = {}
                     trade_list = self.trading_table[base_name]
-                    item_name = item.split(']]')[1].strip()
-                    trade_list[item_name.lower()] = (item_name, int(price), currency, int(stock), int(min_level))
+                    item_name = item.split(']]', 1)[1].strip(' []')
+                    if item_name in ['Gunpowder', 'Sulfur', 'Saltpeter', 'Scrap', 'Lead', 'Machine oil']:
+                        units = 100
+                    elif item_name in ['Gasoline', 'Diesel']:
+                        units = 1000
+                    else:
+                        units = 1
+                    trade_list[item_name.lower()] = (item_name, int(price), currency, int(stock), units, int(min_level))
                 except:
                     print(row)
                     raise
@@ -819,8 +825,8 @@ class Controller:
             if arg.lower() in trading_table:
                 # A location name
                 trade_list = []
-                for item_name, price, currency, stock, min_level in trading_table[arg.lower()].values():
-                    trade_list.append(f'• **{item_name}** for __{price} {currency}__ (max {stock}), level {min_level}')
+                for item_name, price, currency, stock, units, min_level in trading_table[arg.lower()].values():
+                    trade_list.append(f'• **{units} {item_name}** for __{price} {currency}__ (max {stock}), level {min_level}')
                 content += f'Trading in {arg.capitalize()}:\n'+'\n'.join(trade_list)
             if not content:
                 # An item name or not found
@@ -832,8 +838,8 @@ class Controller:
                         if not alias:
                             continue
                         if alias in items:
-                            item_name, price, currency, stock, min_level = items[alias]
-                            trade_list.append(f'• At **{base_name.capitalize()}**: {item_name} for {price} {currency} (max {stock}), level {min_level}')
+                            item_name, price, currency, stock, units, min_level = items[alias]
+                            trade_list.append(f'• At **{base_name.capitalize()}**: {units} {item_name} for {price} {currency} (max {stock}), level {min_level}')
                 if len(trade_list) == 0:
                     content = f'Could not find any trading option for `{item}`'
                     self_delete = True
