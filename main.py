@@ -819,15 +819,17 @@ class Controller:
                 craftable = []
                 self.workshop_table[base_name.lower()] = (base_name, craftable)
                 idx += 1
+                level = 1
                 while idx < len(bases):
                     if bases[idx][bases[idx].find(']]')+2] == ' ':
                         # Craftable list
                         for item in bases[idx].split('|-', 1)[0].split('<br>'):
-                            craftable.append(item.split(']] ')[1].strip('[]\n'))
+                            craftable.append((item.split(']] ')[1].strip('[]\n'), level))
                     else:
                         # Base name
                         break
                     idx += 1
+                    level += 1
         return self.workshop_table
 
     async def trader(self, msg, arg=None, *args):
@@ -901,8 +903,8 @@ class Controller:
                 # A location name
                 base_name, craftables = workshop_table[arg.lower()]
                 craft_list = []
-                for item_name in craftables:
-                    craft_list.append(f'• {item_name}')
+                for item_name, level in craftables:
+                    craft_list.append(f'• {item_name} (workshop level {level})')
                 content += f'Craftable in {arg.capitalize()}:\n'+'\n'.join(craft_list)
             if not content:
                 # An item name or not found
@@ -913,9 +915,9 @@ class Controller:
                     for alias in aliases:
                         if not alias:
                             continue
-                        for craftable in craftables:
+                        for craftable, level in craftables:
                             if alias == craftable.lower():
-                                craft_list.append(f'• {base_name.capitalize()}')
+                                craft_list.append(f'• {base_name.capitalize()} (at level {level})')
                 if len(craft_list) == 0:
                     content = f'Could not find any workshop crafting option for `{item}`'
                     self_delete = True
