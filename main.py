@@ -1066,19 +1066,25 @@ class Controller:
             nick = '@DayRInfo'
         else:
             nick = f'@{msg.channel.guild.me.nick}'
-        print_general_help = True
         if len(args) > 0:
             command = args[0]
             arg, desc, enabled, delay = Controller.commands.get(command, (None, None, None, None))
             if desc and (sudo or enabled):
-                print_general_help = False
                 content = f'`{Controller.HELP_KEY}{command}{arg}`{desc}'
-            await msg.channel.send(**{
-                'content': content,
-                'reference': msg.to_reference(),
-                'mention_author': True,
-                })
-        if print_general_help:
+                await msg.channel.send(**{
+                    'content': content,
+                    'reference': msg.to_reference(),
+                    'mention_author': True,
+                    })
+            else:
+                content = f'Unknown command: {command}'
+                await msg.channel.send(**{
+                    'content': content,
+                    'reference': msg.to_reference(),
+                    'mention_author': True,
+                    'delete_after': 3,
+                    })
+        else:
             content = f'{intro}I understand the following commands (tag me at the start of the message):\n'
             for command, (arg, desc, enabled, delay) in Controller.commands.items():
                 if not sudo and not enabled:
