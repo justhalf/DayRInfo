@@ -1066,27 +1066,40 @@ class Controller:
             nick = '@DayRInfo'
         else:
             nick = f'@{msg.channel.guild.me.nick}'
-        content = f'{intro}I understand the following commands (tag me at the start of the message):\n'
-        for command, (args, desc, enabled, delay) in Controller.commands.items():
-            if not sudo and not enabled:
-                continue
-            if args:
-                args = f' {args.strip()}'
-            if desc:
-                desc = f'\n\t{desc}'
-            content = f'{content}`{Controller.HELP_KEY}{command}{args}`{desc}\n'
-        content = f'{content}----------\n'
-        content = f'{content}• Also, if you tag this bot ({nick}) on a message containing a link to the interactive Day R map 🗺️ with a location URL, I will send you a snapshot of the location.\n'
-        content = f'{content}• React with ❌ to any of my messages to delete it (if I still remember that it was my message). You can only delete my messages that are directed to you.'
-        await msg.author.send(**{
-            'content': content,
-            })
-        await msg.channel.send(**{
-            'content': 'Command list sent via DM!',
-            'reference': msg.to_reference(),
-            'mention_author': True,
-            'delete_after': 3,
-            })
+        print_general_help = True
+        if len(args) > 0:
+            command = args[0]
+            arg, desc, enabled, delay = Controller.commands.get(command, (None, None, None, None))
+            if desc and (sudo or enabled):
+                print_general_help = False
+                content = f'`{Controller.HELP_KEY}{command}{arg}`{desc}'
+            await msg.channel.send(**{
+                'content': content,
+                'reference': msg.to_reference(),
+                'mention_author': True,
+                })
+        if print_general_help:
+            content = f'{intro}I understand the following commands (tag me at the start of the message):\n'
+            for command, (arg, desc, enabled, delay) in Controller.commands.items():
+                if not sudo and not enabled:
+                    continue
+                if arg:
+                    arg = f' {arg.strip()}'
+                if desc:
+                    desc = f'\n\t{desc}'
+                content = f'{content}`{Controller.HELP_KEY}{command}{arg}`{desc}\n'
+            content = f'{content}----------\n'
+            content = f'{content}• Also, if you tag this bot ({nick}) on a message containing a link to the interactive Day R map 🗺️ with a location URL, I will send you a snapshot of the location.\n'
+            content = f'{content}• React with ❌ to any of my messages to delete it (if I still remember that it was my message). You can only delete my messages that are directed to you.'
+            await msg.author.send(**{
+                'content': content,
+                })
+            await msg.channel.send(**{
+                'content': 'Command list sent via DM!',
+                'reference': msg.to_reference(),
+                'mention_author': True,
+                'delete_after': 3,
+                })
 
     async def not_found(self, msg, command):
         """Replies the user with the help message, prepended with the information about invalid command
