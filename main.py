@@ -348,7 +348,8 @@ class Controller:
             'link': ('itemName', '🔗 Show the wikilink for the specified item', True, 10),
             'recipe': ('itemName', '📜 Show the recipe for the specified item', True, 10),
             'info': ('itemName', '🔍 Show the infobox for the specified item', True, 10),
-            'trader': ('(itemName|placeName)', '🏛️ Show where we can trade for and from the specified item', True, 10),
+            'trader': ('(itemName|placeName)', '🏛️ Show where we can buy the specified item or at the specified place', True, 10),
+            'workshop': ('(itemName|placeName)', '🛠️ Show where we can craft the specified item or at the specified place', True, 10),
             'snapshot': ('("world") ("marker") lat lng (zoom)',
                 ('📸 Show a snapshot of the map at the specified location and zoom (-3 to 5).\n'
                 +'\tIf "world" is specified (without quotes) the world map is also shown\n'
@@ -362,7 +363,7 @@ class Controller:
             'set_activity': ('activity', '⚽ Set the bot\'s activity', False, 3),
             'clear_cache': ('', '🧹 Clear the cache', False, 3),
             'status': ('', 'ℹ️ Show the status of the bot', False, 3),
-            'restate': ('[Normal|Trusted|Sudo]', '🛠️ Change the state of the bot', False, 3),
+            'restate': ('[Normal|Trusted|Sudo]', '🔧 Change the state of the bot', False, 3),
             'manage': ('[add|remove] [BANNED_USERS|TRUSTED_USERS|TRUSTED_ROLES|SUDO_IDS|SUDO_CHANNELS] ENTITYID (ENTITYID)*',
                        '🔒 Manage the sudo list and trusted roles', False, 3),
             }
@@ -421,6 +422,7 @@ class Controller:
         self.reply_count = 0
         self.reply_counts = Counter()
         self.trading_table = None
+        self.workshop_table = None
         self.scheduled_status_date = None
         self.scheduled_activity_date = None
         self.author_dm = None
@@ -804,6 +806,30 @@ class Controller:
                     raise
         return self.trading_table
 
+    async def get_workshop_table(self):
+        """Fetch and cache the workshop (specialist) table from wiki
+        """
+        if self.workshop_table is None:
+            self.workshop_table = {}
+            wikitext = await Controller.get_wikitext('Specialist')
+            bases = re.split(r'(?:\|rowspan=[57]\||style="text-align:left" \|)', wikitext)[1:]
+            idx = 0
+            while idx < len(bases):
+                base_name = bases[idx].split('<br>', 1)[1].split('||')[0]
+                craftable = []
+                self.workshop_table[base_name.lower()] = (base_name, craftable)
+                idx += 1
+                while idx < len(bases):
+                    if bases[idx][bases[idx].find(']]')+2] == ' ':
+                        # Craftable list
+                        for item in bases[idx].split('|-', 1)[0].split('<br>'):
+                            craftable.append(item.split(']] ')[1].strip('[]\n'))
+                    else:
+                        # Base name
+                        break
+                    idx += 1
+        return self.workshop_table
+
     async def trader(self, msg, arg=None, *args):
         """Replies the user with a list of places that trade for and from the item
         if the argument is an item name, and a list of possible trades if the argument is a location name
@@ -845,6 +871,57 @@ class Controller:
                 else:
                     content = f'Places that sells {item}:\n'
                     content += '\n'.join(trade_list)
+        response = {
+                'content': content,
+                'reference': msg.to_reference(),
+                'mention_author': True,
+                }
+        if self_delete:
+            response['delete_after'] = 3
+        await msg.channel.send(**response)
+
+    async def workshop(self, msg, arg=None, *args):
+        """Replies the user with a list of places that sells the specified item
+        if the argument is an item name, and a list of possible trades if the argument is a location name
+
+        If the argument is empty, replies the user with the list of possible trading locations
+        """
+        workshop_table = await self.get_workshop_table()
+        self_delete = False
+
+        if not arg:
+            content = '• '+'\n• '.join(place.capitalize() for place in workshop_table.keys())
+            content = f'Places with workshop:\n{content}'
+        else:
+            if args:
+                arg = f'{arg} {" ".join(args)}'
+            # Check for place name
+            content = ''
+            if arg.lower() in workshop_table:
+                # A location name
+                base_name, craftables = workshop_table[arg.lower()]
+                craft_list = []
+                for item_name in craftables:
+                    craft_list.append(f'• {item_name}')
+                content += f'Craftable in {arg.capitalize()}:\n'+'\n'.join(craft_list)
+            if not content:
+                # An item name or not found
+                item = arg
+                craft_list = []
+                for base_name, craftables in workshop_table.values():
+                    aliases = [item.lower(), item+'s'.lower(), item[:-1].lower() if item[-1] == 's' else '', item+' metal', 'sulfuric '+item]
+                    for alias in aliases:
+                        if not alias:
+                            continue
+                        for craftable in craftables:
+                            if alias == craftable.lower():
+                                craft_list.append(f'• {base_name.capitalize()}')
+                if len(craft_list) == 0:
+                    content = f'Could not find any workshop crafting option for `{item}`'
+                    self_delete = True
+                else:
+                    content = f'Places that can craft {item}:\n'
+                    content += '\n'.join(craft_list)
         response = {
                 'content': content,
                 'reference': msg.to_reference(),
