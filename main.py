@@ -1206,6 +1206,7 @@ class Controller:
         content = f'{content}SUDO_IDS: {Guard.SUDO_IDS}\n'
         content = f'{content}SUDO_CHANNELS: {Guard.SUDO_CHANNELS}\n'
         content = f'{content}TRUSTED_ROLES: {Guard.TRUSTED_ROLES}\n'
+        content = f'{content}TRUSTED_USERS: {Guard.TRUSTED_USERS}\n'
         content = f'{content}BANNED_USERS: {Guard.BANNED_USERS}\n'
         content = f'{content}Reply count: {self.reply_count}\n'
         content = f'{content}Reply count per command:'
