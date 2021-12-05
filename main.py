@@ -391,7 +391,7 @@ class Controller:
     WIKI_API_SEARCH_URL = 'https://dayr.fandom.com/api.php?action=query&list=search&utf8=&format=json&srlimit=3&srprop=timestamp&srsearch='
 
     # Verifier settings
-    VERIFIER_THRESHOLD = 0.75
+    VERIFIER_THRESHOLD = 0.70
     VERIFIER_WELCOME = 'To proceed with the verification process for Day R International server, please follow the instruction below.'
     VERIFIER_INSTRUCTION = ('1. Go to Day R game, and open the chat window\n'
                             '2. Go to the Private tab\n'
@@ -1457,9 +1457,9 @@ async def on_message(message):
         await controller.execute(message, command, args)
     elif intent == Intent.MAP:
         if not Guard.has_permission(message, 'attach_files'):
-            await msg.channel.send(**{
+            await message.channel.send(**{
                 'content': 'Cannot send images on this channel',
-                'reference': msg.to_reference(),
+                'reference': message.to_reference(),
                 'mention_author': True,
                 'delete_after': 3,
                 })
@@ -1486,6 +1486,12 @@ async def on_message(message):
                 'mention_author': True,
                 })
         run(message.add_reaction('🗺️')) # map emoji
+    elif intent == Intent.NONE:
+        if message.channel.type == discord.ChannelType.private:
+            if len(message.content) == 0 and len(message.attachments) > 0:
+                await message.channel.send(**{
+                    'content': 'Looks like you are trying to send an image. Did you send it as a reply to my message using **Discord reply function**?',
+                    })
 
 def main(args=None):
     parser = ArgumentParser(description='')

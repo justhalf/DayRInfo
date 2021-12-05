@@ -24,10 +24,10 @@ class VerificationStatus:
 class Verifier:
     DEFAULT_KEYWORD = 'dayr discord'
 
-    def __init__(self, fontpath, threshold=0.75):
+    def __init__(self, fontpath, threshold=0.70):
         self.debug = False
         self.threshold = threshold
-        self.fonts = {v:ImageFont.truetype(fontpath, size=v) for v in range(74, 79)}
+        self.fonts = {v:ImageFont.truetype(fontpath, size=v) for v in range(40, 80)}
         self.valid_chars = set(chr(o) for table in TTFont(fontpath)['cmap'].tables for o in table.cmap.keys())
         self.keyword_images = {}
         for font_size, font in self.fonts.items():
@@ -65,13 +65,14 @@ class Verifier:
         best_y = 0
         best_x = 0
         for font_size, keyword_image in keyword_images.items():
-            heat_map = cv2.matchTemplate(image, keyword_image, cv2.TM_CCOEFF_NORMED)
-            confidence = np.max(heat_map)
-            if confidence >= best_confidence:
-                best_confidence = confidence
-                best_font_size = font_size
-                best_font = self.fonts[best_font_size]
-                best_y, best_x = np.unravel_index(np.argmax(heat_map), heat_map.shape)
+            if 0.9*w <= font_size*30 <= 1.1*w:
+                heat_map = cv2.matchTemplate(image, keyword_image, cv2.TM_CCOEFF_NORMED)
+                confidence = np.max(heat_map)
+                if confidence >= best_confidence:
+                    best_confidence = confidence
+                    best_font_size = font_size
+                    best_font = self.fonts[best_font_size]
+                    best_y, best_x = np.unravel_index(np.argmax(heat_map), heat_map.shape)
 
         username_image = np.array(draw_text(username, best_font, (255, 229, 51)))
 
@@ -95,7 +96,7 @@ class Verifier:
         result = None
         if best_confidence < self.threshold:
             result = VerificationStatus.INVALID
-        elif confidence < self.threshold or abs(x+w-best_x) >= 20:
+        elif confidence/best_confidence < 0.95 or abs(x+w-best_x) >= 20:
             result = VerificationStatus.USERNAME_MISMATCH
         else:
             result = VerificationStatus.VERIFIED
