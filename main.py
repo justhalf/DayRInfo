@@ -1215,7 +1215,7 @@ class Controller:
                 await msg.reference.cached_message.edit(content=replied_msg+'.')
         elif verification_status == VerificationStatus.VERIFIED:
             content = f'Verification successful. You are now verified. Welcome, {username}!\n'
-            content = f'{content}You have been given the role Wastelander, and your Discord nickname has been set to'
+            content = f'{content}You have been given the role Wastelander, and your Discord nickname has been set to '
             content = f'{content}{username}, the same as your in-game name, as per the rules in the server.'
             guild = Controller.GUILD
             orig_channel = Controller.VERIFIER_CHANNEL
