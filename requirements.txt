@@ -3,3 +3,5 @@ Pillow==8.3.2
 requests==2.25.1
 wikitextparser==0.47.4
 asyncstdlib==3.9.2
+opencv-python-headless==4.5.4.60
+fonttools==4.28.3

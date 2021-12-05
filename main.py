@@ -25,6 +25,8 @@ from asyncstdlib import lru_cache
 import time
 from datetime import datetime, timedelta
 from collections import Counter
+from verifier import Verifier, VerificationStatus
+from PIL import Image
 
 logging.basicConfig(level=logging.INFO)
 
@@ -122,13 +124,18 @@ guard = Guard()
 class Intent:
     DIRECT = 'Direct'
     MAP = 'Map'
+    VERIFY1 = 'Verify1'
+    VERIFY2 = 'Verify2'
     NONE = 'None'
 
     @staticmethod
     def get_intent(msg):
         """Returns the intent of the message, as defined by the Intent class
         """
-        if re.search(MapController.MAP_REGEX, msg.content) and client.user.id in msg.raw_mentions:
+        if (msg.reference and msg.reference.cached_message and msg.reference.cached_message.author == client.user
+                and msg.reference.cached_message.content.startswith(Controller.VERIFIER_WELCOME)):
+            return Intent.VERIFY2
+        elif re.search(MapController.MAP_REGEX, msg.content) and client.user.id in msg.raw_mentions:
             return Intent.MAP
         elif re.match(Controller.KEY_REGEX, msg.content):
             return Intent.DIRECT
@@ -344,28 +351,31 @@ async def on_ready():
 class Controller:
     # The list of supported commands, mapped to its description
     commands = {
-            'help': ('', '❓ Show this help (and other bots\' help message too)', True, 0),
-            'link': ('itemName', '🔗 Show the wikilink for the specified item', True, 10),
-            'recipe': ('itemName', '📜 Show the recipe for the specified item', True, 10),
-            'info': ('itemName', '🔍 Show the infobox for the specified item', True, 10),
-            'trader': ('(itemName|placeName)', '🏛️ Show where we can buy the specified item or at the specified place', True, 10),
-            'workshop': ('(itemName|placeName)', '🛠️ Show where we can craft the specified item or at the specified place', True, 10),
+            'help': ('', '❓ Show this help (and other bots\' help message too)', True, True, 0),
+            'link': ('itemName', '🔗 Show the wikilink for the specified item', True, True, 10),
+            'recipe': ('itemName', '📜 Show the recipe for the specified item', True, True, 10),
+            'info': ('itemName', '🔍 Show the infobox for the specified item', True, True, 10),
+            'trader': ('(itemName|placeName)', '🏛️ Show where we can buy the specified item or at the specified place', True, True, 10),
+            'workshop': ('(itemName|placeName)', '🛠️ Show where we can craft the specified item or at the specified place', True, True, 10),
             'snapshot': ('("world") ("marker") lat lng (zoom)',
                 ('📸 Show a snapshot of the map at the specified location and zoom (-3 to 5).\n'
                 +'\tIf "world" is specified (without quotes) the world map is also shown\n'
-                +'\tIf "marker" is specified (without quotes) a marker will be shown'), True, 60),
-            'location': ('placeName', '📍 Show the location details of the specified place', True, 60),
-            'distance': ('"place1" "place2"', '📐 Calculate the distance between the two places', True, 10),
+                +'\tIf "marker" is specified (without quotes) a marker will be shown'), True, True, 60),
+            'location': ('placeName', '📍 Show the location details of the specified place', True, True, 60),
+            'distance': ('"place1" "place2"', '📐 Calculate the distance between the two places', True, True, 10),
+
+            # Hidden commands below
+            'verifyme': ('ingameName', '🛂 Do automatic verification for Day R International server', True, False, 60),
 
             # Privileged commands below
-            'echo': ('text', '🔤 Return back your text', False, 3),
-            'set_key': ('regex (help_key)', '🗝️ Change the trigger key (and the text in help message)', False, 3),
-            'set_activity': ('activity', '⚽ Set the bot\'s activity', False, 3),
-            'clear_cache': ('', '🧹 Clear the cache', False, 3),
-            'status': ('', 'ℹ️ Show the status of the bot', False, 3),
-            'restate': ('[Normal|Trusted|Sudo]', '🔧 Change the state of the bot', False, 3),
+            'echo': ('text', '🔤 Return back your text', False, True, 3),
+            'set_key': ('regex (help_key)', '🗝️ Change the trigger key (and the text in help message)', False, True, 3),
+            'set_activity': ('activity', '⚽ Set the bot\'s activity', False, True, 3),
+            'clear_cache': ('', '🧹 Clear the cache', False,  True, 3),
+            'status': ('', 'ℹ️ Show the status of the bot', False, True, 3),
+            'restate': ('[Normal|Trusted|Sudo]', '🔧 Change the state of the bot', False, True, 3),
             'manage': ('[add|remove] [BANNED_USERS|TRUSTED_USERS|TRUSTED_ROLES|SUDO_IDS|SUDO_CHANNELS] ENTITYID (ENTITYID)*',
-                       '🔒 Manage the sudo list and trusted roles', False, 3),
+                       '🔒 Manage the sudo list and trusted roles', False, True, 3),
             }
 
     # The regex to detect messages starting with a mention to this bot
@@ -379,6 +389,18 @@ class Controller:
     # The URL to wiki API
     WIKI_API_REV_URL = 'https://dayr.fandom.com/api.php?action=query&prop=revisions&rvprop=content&format=json&rvslots=main&titles='
     WIKI_API_SEARCH_URL = 'https://dayr.fandom.com/api.php?action=query&list=search&utf8=&format=json&srlimit=3&srprop=timestamp&srsearch='
+
+    # Verifier settings
+    VERIFIER_THRESHOLD = 0.75
+    VERIFIER_WELCOME = 'To proceed with the verification process for Day R International server, please follow the instruction below.'
+    VERIFIER_INSTRUCTION = ('1. Go to Day R game, and open the chat window\n'
+                            '2. Go to the Private tab\n'
+                            '3. Send the following message "dayr discord" (without quotes)\n'
+                            '4. The system will reply with error, but that is ok\n'
+                            '5. Take a screenshot and send it as a reply to this message using Discord **reply function**')
+    VERIFIER_CHANNEL = None
+
+    GUILD = None
 
     @staticmethod
     def get_args(msg):
@@ -412,7 +434,7 @@ class Controller:
         """
         # For each user and command, specifies the time the user is able to use that command
         self.user_limit = {}
-        for command, (_, _, _, delay) in Controller.commands.items():
+        for command, (_, _, _, _, delay) in Controller.commands.items():
             if delay == 0:
                 # Not rate-limited
                 continue
@@ -426,6 +448,7 @@ class Controller:
         self.scheduled_status_date = None
         self.scheduled_activity_date = None
         self.author_dm = None
+        self.verifier = Verifier('res/freemono.ttf', threshold=Controller.VERIFIER_THRESHOLD)
 
     def can_execute(self, msg, command, now):
         """Returns whether the author of the message is allowed to run the command
@@ -488,7 +511,13 @@ class Controller:
                 else:
                     delay = self.user_limit[command]['delay'] * NS_IN_S
                 self.user_limit[command][msg.author.id] = now + delay
-            await self.__getattribute__(command)(msg, *args)
+            try:
+                await self.__getattribute__(command)(msg, *args)
+            except AttributeError:
+                await msg.channel.send(**{
+                    'content': f'There is no command `{command}`',
+                    'delete_after': 3,
+                    })
             self.reply_count += 1
             self.reply_counts[command] += 1
         else:
@@ -1068,8 +1097,8 @@ class Controller:
             nick = f'@{msg.channel.guild.me.nick}'
         if len(args) > 0:
             command = args[0]
-            arg, desc, enabled, delay = Controller.commands.get(command, (None, None, None, None))
-            if desc and (sudo or enabled):
+            arg, desc, enabled, showhelp, delay = Controller.commands.get(command, (None, None, None, None, None))
+            if desc and (sudo or enabled) and showhelp:
                 content = f'`{Controller.HELP_KEY}{command}{arg}`{desc}'
                 await msg.channel.send(**{
                     'content': content,
@@ -1086,8 +1115,10 @@ class Controller:
                     })
         else:
             content = f'{intro}I understand the following commands (tag me at the start of the message):\n'
-            for command, (arg, desc, enabled, delay) in Controller.commands.items():
+            for command, (arg, desc, enabled, showhelp, delay) in Controller.commands.items():
                 if not sudo and not enabled:
+                    continue
+                if not showhelp:
                     continue
                 if arg:
                     arg = f' {arg.strip()}'
@@ -1106,6 +1137,107 @@ class Controller:
                 'mention_author': True,
                 'delete_after': 3,
                 })
+
+    async def verifyme(self, msg, *args):
+        authorized = msg.channel.id == 916767970217304114
+        if authorized:
+            if not controller.verifier.username_is_supported(args[0]):
+                content = f'Sorry, the given username is not supported by the verification bot.\n'
+                content = f'{content}Please go through the manual verification process at #verify-me channel.'
+                await msg.channel.send(**{
+                    'content': content,
+                    'delete_after': 5,
+                    })
+                await msg.add_reaction('⚠')
+            else:
+                content = f'{Controller.VERIFIER_WELCOME}\n\n{Controller.VERIFIER_INSTRUCTION}'
+                content = f'{content}\n==={msg.id}\n===\n{args[0]}\n.'
+                await msg.author.send(**{
+                    'content': content,
+                    })
+                await msg.add_reaction('⏳')
+        else:
+            await self.not_found(msg, 'verifyme')
+
+    async def verify2(self, msg):
+        if len(msg.attachments) == 0:
+            content = 'Error 1: No image found.\n'
+            content = f'{content}Please send the image of your chat screen on tab "Private" with the last message '
+            content = f'{content}being "dayr discord" (without quotes) sent by you'
+            await msg.channel.send(**{
+                'content': content,
+                'reference': msg.to_reference(),
+                'mention_author': True,
+                })
+            return
+        Controller.GUILD = discord.utils.get(client.guilds, id=396019800855281665)
+        Controller.VERIFIER_CHANNEL = discord.utils.get(Controller.GUILD.channels, id=916767970217304114)
+        replied_msg = msg.reference.cached_message.content
+        orig_msg_id, username_tries = replied_msg.split('===', 2)[1:]
+        orig_msg_id = int(orig_msg_id.strip())
+        username, tries = username_tries.strip().split('\n')
+        tries = len(tries)
+        fp = BytesIO()
+        await msg.attachments[0].save(fp)
+        image = Image.open(fp).convert('RGBA')
+        verification_status, username_conf, keyword_conf, font_size = self.verifier.verify(image, username)
+        logging.info(f'Verification result for {username} ({msg.author.id}): {verification_status}, {username_conf}, {keyword_conf}, {font_size}')
+        if verification_status == VerificationStatus.INVALID:
+            if tries == 3:
+                content = 'Error 2: Image does not seem to contain the keyword.\n'
+                content = f'{content}Too many failed attempts. Please restart the process from the beginning, '
+                content = f'{content}or go through the manual verification process at #verify-me channel.'
+                orig_msg = await Controller.VERIFIER_CHANNEL.fetch_message(orig_msg_id)
+                await orig_msg.add_reaction('❌')
+                await orig_msg.remove_reaction('⏳', client.user)
+                await msg.reference.cached_message.edit(content=Controller.VERIFIER_INSTRUCTION)
+            else:
+                content = 'Error 2: Image does not seem to contain the keyword.\n'
+                content = f'{content}Please send the right image as a reply to the verification message sent above. '
+                content = f'{content}The screenshot should be on your Private chat tab with you sending the message '
+                content = f'{content}"dayr discord" (without quotes) as the last message.'
+                await msg.reference.cached_message.edit(content=replied_msg+'.')
+        elif verification_status == VerificationStatus.USERNAME_MISMATCH:
+            if tries == 3:
+                content = 'Error 3: Cannot match the given username with the image.\n'
+                content = f'{content}Too many failed attempts. Please restart the process from the beginning, '
+                content = f'{content}ensuring that you give the right username with the ~verifyme command, '
+                content = f'{content}or you can also go through the manual verification process at #verify-me channel.'
+                orig_msg = await Controller.VERIFIER_CHANNEL.fetch_message(orig_msg_id)
+                await orig_msg.add_reaction('❌')
+                await orig_msg.remove_reaction('⏳', client.user)
+                await msg.reference.cached_message.edit(content=Controller.VERIFIER_INSTRUCTION)
+            else:
+                content = 'Error 3: Cannot match the given username with the image.\n'
+                content = f'{content}Please ensure you give the right username when starting this process. '
+                content = f'{content}You can try again by replying the verification instruction message above with another image, '
+                content = f'{content}or you can also go through the manual verification process at #verify-me channel.'
+                await msg.reference.cached_message.edit(content=replied_msg+'.')
+        elif verification_status == VerificationStatus.VERIFIED:
+            content = f'Verification successful. You are now verified. Welcome, {username}!\n'
+            content = f'{content}You have been given the role Wastelander, and your Discord nickname has been set to'
+            content = f'{content}{username}, the same as your in-game name, as per the rules in the server.'
+            guild = Controller.GUILD
+            orig_channel = Controller.VERIFIER_CHANNEL
+            role = discord.utils.get(guild.roles, name='Wastelander')
+            member = await guild.fetch_member(msg.author.id)
+            await member.add_roles(role, reason='Bot verified')
+            role = discord.utils.get(guild.roles, name='Unverified Wastelander')
+            await member.remove_roles(role, reason='Bot verified')
+            orig_msg = await orig_channel.fetch_message(orig_msg_id)
+            await orig_msg.add_reaction('🆗')
+            await orig_msg.remove_reaction('⏳', client.user)
+            await msg.reference.cached_message.edit(content=Controller.VERIFIER_INSTRUCTION)
+            try:
+                await member.edit(nick=username)
+            except discord.errors.Forbidden:
+                # Ignore, as this means it's trying to verify mod
+                pass
+        await msg.channel.send(**{
+            'content': content,
+            'reference': msg.to_reference(),
+            'mention_author': True,
+            })
 
     async def not_found(self, msg, command):
         """Replies the user with the help message, prepended with the information about invalid command
@@ -1317,7 +1449,9 @@ async def on_message(message):
                  +f'.\tAt {message.created_at}'))
     intent = Intent.get_intent(message)
     logging.info(f'Intent: {intent}')
-    if intent == Intent.DIRECT:
+    if intent == Intent.VERIFY2:
+        await controller.verify2(message)
+    elif intent == Intent.DIRECT:
         command, args = controller.get_args(message)
         logging.info(f'Command: {command}, args: {args}')
         await controller.execute(message, command, args)
@@ -1375,6 +1509,11 @@ def main(args=None):
     except:
         Guard.AUTHOR = int(os.environ.get('AUTHOR'))
         Guard.AUTHOR_DM = int(os.environ.get('AUTHOR_DM'))
+    try:
+        with open('verifier_threshold.txt', 'r') as infile:
+            Controller.VERIFIER_THRESHOLD = float(infile.read().strip())
+    except:
+        Controller.VERIFIER_THRESHOLD = float(os.environ.get('VERIFIER_THRESHOLD'))
     Guard.SUDO_IDS.add(Guard.AUTHOR)
     try:
         # Map all location names (in all languages) into their lat, lng and size (for name collision handling)
