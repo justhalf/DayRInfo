@@ -695,6 +695,47 @@ class Controller:
                 if tools:
                     content = f'{content}\nAnd these tools:\n{tools}'
                 break
+            elif template.name.strip().lower() == 'recipespecialist':
+                args = template.arguments
+                logging.info(args)
+                ingredients = []
+                level = []
+                town = []
+                def parse_args(args):
+                    idx = 0
+                    while idx < len(args):
+                        arg = args[idx].string.strip(' |')
+                        if arg == '':
+                            idx += 1
+                            continue
+                        if '=' not in arg:
+                            amount = args[idx+1].string.strip(' |')
+                            if not amount or amount != '0':
+                                ingredients.append(f'{emojis.get(arg.lower().replace(" ", "_"), "")}{arg.capitalize()} x{amount}')
+                            else:
+                                ingredients.append(f'{emojis.get(arg.lower().replace(" ", "_"), "")}{arg.capitalize()}')
+                            idx += 1
+                        elif arg.startswith('input'):
+                            templates = WTP.parse(arg.split('=', maxsplit=1)[1].strip()).templates
+                            if len(templates) > 0:
+                                parse_args(templates[0].arguments)
+                        elif arg.startswith('level'):
+                            try:
+                                level.append(int(arg.split('=')[1].strip()))
+                            except:
+                                pass
+                        elif arg.startswith('town'):
+                            town.append(arg.split('=')[1].strip())
+                        idx += 1
+                parse_args(args)
+                requirements = ''
+                if level:
+                    requirements = f' (at {town[0]} at workshop level {level[0]})'
+                else:
+                    requirements = f' (at {town[0]})'
+                ingredients = '• '+'\n• '.join(ingredients)
+                content = f'To craft {item}{requirements}, you need:\n{ingredients}'
+                break
         logging.info(f'Templates in {item}: {", ".join(template_names)}')
         for table in parsed.tables:
             if 'Ingredients' in table:
