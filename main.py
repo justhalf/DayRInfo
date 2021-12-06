@@ -642,7 +642,7 @@ class Controller:
         parsed = WTP.parse(wikitext)
         content = None
         template_names = []
-        version = None
+        version = '??'
         for template in parsed.templates:
             template_names.append(template.name.strip())
             if template.name.strip().lower() == 'version':
@@ -756,9 +756,7 @@ class Controller:
                 'delete_after': 3,
                 })
             return
-        content += f'\nSource: {page_url}'
-        if version:
-            content += f' (version {version})'
+        content += f'\nSource: {page_url} (version {version})'
         await msg.channel.send(**{
             'content': content,
             'reference': msg.to_reference(),
