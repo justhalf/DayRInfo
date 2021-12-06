@@ -679,6 +679,7 @@ class Controller:
                                 for ingredient in arg.split('=', maxsplit=1)[1].strip().split('*')[1:]:
                                     name, quantity = ingredient.rsplit('x', maxsplit=1)
                                     name = name.replace('[','').replace(']','').strip()
+                                    quantity = quantity.strip()
                                     ingredients.append(f'{emojis.get(name.lower().replace(" ", "_"), "")}{name} x{quantity}')
                         elif arg.startswith('level'):
                             try:
