@@ -646,7 +646,7 @@ class Controller:
         for template in parsed.templates:
             template_names.append(template.name.strip())
             if template.name.strip().lower() == 'version':
-                version = template.arguments[0].strip(' |')
+                version = template.arguments[0].string.strip(' |')
             if template.name.strip().lower() == 'recipe':
                 args = template.arguments
                 logging.info(args)
