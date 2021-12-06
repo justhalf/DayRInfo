@@ -674,6 +674,12 @@ class Controller:
                             templates = WTP.parse(arg.split('=', maxsplit=1)[1].strip()).templates
                             if len(templates) > 0:
                                 parse_args(templates[0].arguments)
+                            else:
+                                # Not a template
+                                for ingredient in arg.split('=', maxsplit=1)[1].strip().split('*'):
+                                    name, quantity = ingredient.rsplit('x', maxsplit=1)
+                                    name = name.replace('[','').replace(']','').strip()
+                                    ingredients.append(f'{emojis.get(name.lower().replace(" ", "_"), "")}{name} x{quantity}')
                         elif arg.startswith('level'):
                             try:
                                 level.append(int(arg.split('=')[1].strip()))
