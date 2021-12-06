@@ -642,8 +642,11 @@ class Controller:
         parsed = WTP.parse(wikitext)
         content = None
         template_names = []
+        version = None
         for template in parsed.templates:
             template_names.append(template.name.strip())
+            if template.name.strip().lower() == 'version':
+                version = template.arguments[0].strip(' |')
             if template.name.strip().lower() == 'recipe':
                 args = template.arguments
                 logging.info(args)
@@ -754,6 +757,8 @@ class Controller:
                 })
             return
         content += f'\nSource: {page_url}'
+        if version:
+            content += f' (version {version})'
         await msg.channel.send(**{
             'content': content,
             'reference': msg.to_reference(),
