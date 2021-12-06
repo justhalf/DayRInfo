@@ -1533,8 +1533,10 @@ async def on_message(message):
     elif intent == Intent.NONE:
         if message.channel.type == discord.ChannelType.private:
             if len(message.content) == 0 and len(message.attachments) > 0:
+                content = 'Looks like you are trying to send an image. Did you send it as a reply to my message using **Discord reply function**?'
+                content = f'{content} If you have done so, perhaps there is an error in the bot, please report in the channel.'
                 await message.channel.send(**{
-                    'content': 'Looks like you are trying to send an image. Did you send it as a reply to my message using **Discord reply function**?',
+                    'content': content,
                     })
 
 def main(args=None):

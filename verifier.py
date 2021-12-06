@@ -58,6 +58,8 @@ class Verifier:
             keyword_images = self.keyword_images
 
         w, h = image.size
+        if self.debug:
+            print(f'Image size: {w}, {h}')
         image = image.crop((0, h//2, w//2, h))
         image = np.array(image)
         best_font_size = 0
@@ -96,7 +98,7 @@ class Verifier:
         result = None
         if best_confidence < self.threshold:
             result = VerificationStatus.INVALID
-        elif confidence/best_confidence < 0.95 or abs(x+w-best_x) >= 20:
+        elif confidence/best_confidence < 0.925 or abs(x+w-best_x) >= 20:
             result = VerificationStatus.USERNAME_MISMATCH
         else:
             result = VerificationStatus.VERIFIED
