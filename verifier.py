@@ -27,7 +27,7 @@ class Verifier:
     def __init__(self, fontpath, threshold=0.70):
         self.debug = False
         self.threshold = threshold
-        self.fonts = {v:ImageFont.truetype(fontpath, size=v) for v in range(40, 80)}
+        self.fonts = {v:ImageFont.truetype(fontpath, size=v) for v in range(20, 100)}
         self.valid_chars = set(chr(o) for table in TTFont(fontpath)['cmap'].tables for o in table.cmap.keys())
         self.keyword_images = {}
         for font_size, font in self.fonts.items():
