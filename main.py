@@ -1195,12 +1195,19 @@ class Controller:
     async def verifyme(self, msg, *args):
         authorized = msg.channel.id == 916767970217304114
         if authorized:
-            if not controller.verifier.username_is_supported(args[0]):
-                content = f'Sorry, the given username is not supported by the verification bot.\n'
-                content = f'{content}Please go through the manual verification process at #verify-me channel.'
+            check_role = discord.utils.get(msg.author.roles, id=673729630230020106) # Wastelander (online)
+            if check_role:
+                content = f'Hi, you seem to have already been verified. Go ahead and chat in the trading channels!'
                 await msg.channel.send(**{
                     'content': content,
-                    'delete_after': 5,
+                    'reference': msg.to_reference(),
+                    'mention_author': True,
+                    })
+            elif not controller.verifier.username_is_supported(args[0]):
+                content = f'Sorry, the given username is not supported by the verification bot.\n'
+                content = f'{content}Please wait for either a <@&415705157716934656> or <@&700707537711923241> to verify you.'
+                await msg.channel.send(**{
+                    'content': content,
                     })
                 await msg.add_reaction('⚠')
             else:
@@ -1239,8 +1246,8 @@ class Controller:
         if verification_status == VerificationStatus.INVALID:
             if tries == 3:
                 content = 'Error 2: Image does not seem to contain the keyword.\n'
-                content = f'{content}Too many failed attempts. Please restart the process from the beginning, '
-                content = f'{content}or go through the manual verification process at #verify-me channel.'
+                content = f'{content}Too many failed attempts. Please restart the process from the beginning if you would like to retry,'
+                content = f'{content}or go through the manual verification process at by pinging Discord Moderator or Supporter.'
                 orig_msg = await Controller.VERIFIER_CHANNEL.fetch_message(orig_msg_id)
                 await orig_msg.add_reaction('❌')
                 await orig_msg.remove_reaction('⏳', client.user)
@@ -1256,7 +1263,7 @@ class Controller:
                 content = 'Error 3: Cannot match the given username with the image.\n'
                 content = f'{content}Too many failed attempts. Please restart the process from the beginning, '
                 content = f'{content}ensuring that you give the right username with the ~verifyme command, '
-                content = f'{content}or you can also go through the manual verification process at #verify-me channel.'
+                content = f'{content}or go through the manual verification process at by pinging Discord Moderator or Supporter.'
                 orig_msg = await Controller.VERIFIER_CHANNEL.fetch_message(orig_msg_id)
                 await orig_msg.add_reaction('❌')
                 await orig_msg.remove_reaction('⏳', client.user)
@@ -1265,19 +1272,19 @@ class Controller:
                 content = 'Error 3: Cannot match the given username with the image.\n'
                 content = f'{content}Please ensure you give the right username when starting this process. '
                 content = f'{content}You can try again by replying the verification instruction message above with another image, '
-                content = f'{content}or you can also go through the manual verification process at #verify-me channel.'
+                content = f'{content}or go through the manual verification process at by pinging Discord Moderator or Supporter.'
                 await msg.reference.cached_message.edit(content=replied_msg+'.')
         elif verification_status == VerificationStatus.VERIFIED:
-            content = f'Verification successful. You are now verified. Welcome, {username}!\n'
-            content = f'{content}You have been given the role Wastelander, and your Discord nickname has been set to '
-            content = f'{content}{username}, the same as your in-game name, as per the rules in the server.'
             guild = Controller.GUILD
             orig_channel = Controller.VERIFIER_CHANNEL
-            role = discord.utils.get(guild.roles, name='Wastelander')
             member = await guild.fetch_member(msg.author.id)
+
+            role = discord.utils.get(guild.roles, id=673729630230020106) # Wastelander (online)
             await member.add_roles(role, reason='Bot verified')
-            role = discord.utils.get(guild.roles, name='Unverified Wastelander')
+
+            role = discord.utils.get(guild.roles, id=917796458319712307) # Wastelander
             await member.remove_roles(role, reason='Bot verified')
+
             orig_msg = await orig_channel.fetch_message(orig_msg_id)
             await orig_msg.add_reaction('🆗')
             await orig_msg.remove_reaction('⏳', client.user)
@@ -1287,6 +1294,11 @@ class Controller:
             except discord.errors.Forbidden:
                 # Ignore, as this means it's trying to verify mod
                 pass
+
+            content = f'Verification successful. You are now verified. Welcome, {username}!\n'
+            content = f'{content}You have been given the role Wastelander (online), and your Discord nickname has been set to '
+            content = f'{content}{username}, the same as your in-game name, as per the rules in the server.\n'
+            content = f'{content}You can now chat in the trading channels.'
         await msg.channel.send(**{
             'content': content,
             'reference': msg.to_reference(),
