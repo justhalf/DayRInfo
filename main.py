@@ -816,8 +816,11 @@ class Controller:
             return
         contents = []
         template_names = []
+        version = '??'
         for template in WTP.parse(wikitext).templates:
             template_names.append(template.name.strip())
+            if template.name.strip().lower() == 'version':
+                version = template.arguments[0].string.strip(' |')
             if self.is_infobox(template.name):
                 args = template.arguments
                 title = item
@@ -836,7 +839,7 @@ class Controller:
                         entries[k] = v.replace('\n\n', '\n').replace('\n', '\n\t')
                 entries = [f'{k} = {v}' for k, v in entries.items()]
                 entries = '• '+'\n• '.join(entries)
-                content = f'## **{title}** ##\nSource: {page_url}\n{template.name.strip()}\n{entries}'
+                content = f'## **{title}** ##\nSource: {page_url} (version {version})\n{template.name.strip()}\n{entries}'
                 contents.append(content)
         logging.info(f'Templates at {item}: '+', '.join(template_names))
         if not contents:
