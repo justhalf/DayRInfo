@@ -66,8 +66,10 @@ class Verifier:
         best_confidence = 0
         best_y = 0
         best_x = 0
+        best_w = 0
+        best_h = 0
         for font_size, keyword_image in keyword_images.items():
-            if 0.9*w <= font_size*30 <= 1.1*w:
+            if 0.75*w <= font_size*30 <= 1.25*w:
                 heat_map = cv2.matchTemplate(image, keyword_image, cv2.TM_CCOEFF_NORMED)
                 confidence = np.max(heat_map)
                 if confidence >= best_confidence:
@@ -75,6 +77,7 @@ class Verifier:
                     best_font_size = font_size
                     best_font = self.fonts[best_font_size]
                     best_y, best_x = np.unravel_index(np.argmax(heat_map), heat_map.shape)
+                    best_h, best_w = keyword_image.shape[:2]
 
         username_image = np.array(draw_text(username, best_font, (255, 229, 51)))
 
@@ -91,6 +94,7 @@ class Verifier:
             Image.fromarray(sub_heat_map).save('test/heat_map.tiff')
 
             cv2.rectangle(image, (x,y), (x+w, y+h), (255, 0, 0, 255), 2)
+            cv2.rectangle(image, (best_x,best_y), (best_x+best_w, best_y+best_h), (255, 0, 0, 255), 2)
 
             image_result = Image.fromarray(image)
             image_result.save('test/result.png')
