@@ -925,7 +925,10 @@ class Controller:
         self_delete = False
 
         if not arg:
-            content = '• '+'\n• '.join(place.capitalize() for place in trading_table.keys())
+            content = ''
+            for place in trading_table.keys():
+                currency = list(trading_table[place].values())[0][2]
+                content += f'• {place.capitalize()} (with {currency})\n'
             content = f'Places you can trade:\n{content}'
         else:
             if args:
