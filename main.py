@@ -871,7 +871,7 @@ class Controller:
             wikitext = '\n'.join(wikilines[idx+1:])
             for row in wikitext.split('|-')[1:-1]:
                 try:
-                    icon, base_name, item, price, _, currency, stock, min_level = row.split('||')
+                    icon, base_name, item, price, currency, stock, min_level = row.split('||')
                     base_name = base_name.lower()
                     if base_name not in self.trading_table:
                         self.trading_table[base_name] = {}
@@ -883,6 +883,7 @@ class Controller:
                         units = 1000
                     else:
                         units = 1
+                    currency = currency.split(']]')[-1].strip()
                     trade_list[item_name.lower()] = (item_name, int(price), currency, int(stock), units, int(min_level))
                 except:
                     print(row)
