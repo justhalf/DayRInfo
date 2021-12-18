@@ -865,7 +865,7 @@ class Controller:
             wikilines = wikitext.split('\n')
             start_line = 0
             for idx, line in enumerate(wikilines):
-                if 'Full Trading Table' in line:
+                if 'Trading in Survivor Camps' in line:
                     start_line = idx
                     break
             wikitext = '\n'.join(wikilines[idx+1:])
