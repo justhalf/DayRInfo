@@ -1217,9 +1217,10 @@ class Controller:
             else:
                 content = f'{Controller.VERIFIER_WELCOME}\n\n{Controller.VERIFIER_INSTRUCTION}'
                 content = f'{content}\n==={msg.id}\n===\n{args[0]}\n.'
-                await msg.author.send(**{
+                verification_message = await msg.author.send(**{
                     'content': content,
                     })
+                logging.info(f'Verification instruction sent to {msg.author} as {verification_message.id}')
                 await msg.add_reaction('⏳')
         else:
             await self.not_found(msg, 'verifyme')
@@ -1512,11 +1513,19 @@ async def on_message(message):
     if not guard.allow(message):
         return
 
-    logging.info((f'Received message: {message.content}\n'
-                 +f'.\tFrom {message.author} ({message.author.id})\n'
-                 +f'.\tIn {message.channel} ({message.channel.id})\n'
-                 +f'.\tServer {message.guild} ({message.guild.id if message.guild else ""})\n'
-                 +f'.\tAt {message.created_at}'))
+    # Logging
+    log_content = f'Received message: {message.content}\n'
+    if message.reference:
+        log_content += '.\tAs a reply to {message.reference.id}\n'
+    else:
+        log_content += '.\tNot a reply to anything\n'
+    log_content += f'.\tContaining {len(message.attachments)} attachments\n'
+    log_content += f'.\tFrom {message.author} ({message.author.id})\n'
+    log_content += f'.\tIn {message.channel} ({message.channel.id})\n'
+    log_content += f'.\tServer {message.guild} ({message.guild.id if message.guild else ""})\n'
+    log_content += f'.\tAt {message.created_at}'
+    logging.info(log_content)
+
     intent = Intent.get_intent(message)
     logging.info(f'Intent: {intent}')
     if intent == Intent.VERIFY2:
