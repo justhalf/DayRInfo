@@ -778,7 +778,7 @@ class Controller:
             return True
         if name == 'Armors_(NEW)':
             return True
-        if name == 'All_inclusive_infobox_2020':
+        if name == 'All_inclusive_infobox_2020' or name == 'All inclusive infobox 2020':
             return True
         if name.lower() == 'item':
             return True
