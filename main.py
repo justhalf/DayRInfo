@@ -1516,7 +1516,7 @@ async def on_message(message):
     # Logging
     log_content = f'Received message: {message.content}\n'
     if message.reference:
-        log_content += f'.\tAs a reply to {message.reference.id}\n'
+        log_content += f'.\tAs a reply to {message.reference}\n'
     else:
         log_content += '.\tNot a reply to anything\n'
     log_content += f'.\tContaining {len(message.attachments)} attachments\n'
