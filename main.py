@@ -357,7 +357,7 @@ class Controller:
             'info': ('itemName', '🔍 Show the infobox for the specified item', True, True, 10),
             'trader': ('(itemName|placeName)', '🏛️ Show where we can buy the specified item or at the specified place', True, True, 10),
             'buyer': ('itemName', '💰 Show the sell price of the specified item', True, True, 10),
-            'buyers': ('itemName (itemName)+', '💰 Show the sell price of multiple items', True, True, 10),
+            'buyers': ('itemName (itemName)+', '💰 Show the sell price of multiple items (up to 10)', True, True, 10),
             'workshop': ('(itemName|placeName)', '🛠️ Show where we can craft the specified item or at the specified place', True, True, 10),
             'snapshot': ('("world") ("marker") lat lng (zoom)',
                 ('📸 Show a snapshot of the map at the specified location and zoom (-3 to 5).\n'
@@ -1018,14 +1018,14 @@ class Controller:
         await self.buyers(msg, item)
 
     async def buyers(self, msg, *args):
-        """Replies the user with the price of the given items (multiple)
+        """Replies the user with the price of the given items (multiple, up to 10)
         """
         buyer_table = await self.get_buyer_table()
 
         if not args:
             await self.help(msg, 'buyers', intro='Please provide an item name')
             return
-        items = args
+        items = args[:10]
 
         buyer_list = []
         for item in items:
