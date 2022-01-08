@@ -356,6 +356,8 @@ class Controller:
             'recipe': ('itemName', '📜 Show the recipe for the specified item', True, True, 10),
             'info': ('itemName', '🔍 Show the infobox for the specified item', True, True, 10),
             'trader': ('(itemName|placeName)', '🏛️ Show where we can buy the specified item or at the specified place', True, True, 10),
+            'buyer': ('itemName', '💰 Show the sell price of the specified item', True, True, 10),
+            'buyers': ('itemName (itemName)+', '💰 Show the sell price of multiple items', True, True, 10),
             'workshop': ('(itemName|placeName)', '🛠️ Show where we can craft the specified item or at the specified place', True, True, 10),
             'snapshot': ('("world") ("marker") lat lng (zoom)',
                 ('📸 Show a snapshot of the map at the specified location and zoom (-3 to 5).\n'
@@ -444,6 +446,7 @@ class Controller:
         self.reply_count = 0
         self.reply_counts = Counter()
         self.trading_table = None
+        self.buyer_table = None
         self.workshop_table = None
         self.scheduled_status_date = None
         self.scheduled_activity_date = None
@@ -892,6 +895,35 @@ class Controller:
                     raise
         return self.trading_table
 
+    async def get_buyer_table(self):
+        """Fetch and cache the buyer table from wiki
+        """
+        if self.buyer_table is None:
+            self.buyer_table = {}
+            wikitext = await Controller.get_wikitext('Buyer')
+            wikilines = wikitext.split('\n')
+            start_line = 0
+            for idx, line in enumerate(wikilines):
+                if 'Item Sell Price' in line:
+                    start_line = idx
+                    break
+            wikitext = '\n'.join(wikilines[idx+1:])
+            for row in wikitext.split('|-')[2:]:
+                try:
+                    icon, item, br_cost, in_cost, rc_cost, ratio = row.split('||')
+                    if item.split(']]')[-1].strip():
+                        units = int(item.split(']]')[-1].strip()[1:])
+                        item = item.rsplit(']]',1)[0].strip()
+                    else:
+                        units = 1
+                    item_name = item.replace('[','').replace(']','').strip().split('|')[-1]
+                    ratio = ratio.split('\n')[0].strip()
+                    self.buyer_table[item_name.lower()] = (item_name, units, int(br_cost), int(in_cost), int(rc_cost), ratio)
+                except:
+                    print(row)
+                    raise
+        return self.buyer_table
+
     async def get_workshop_table(self):
         """Fetch and cache the workshop (specialist) table from wiki
         """
@@ -969,6 +1001,55 @@ class Controller:
                 }
         if self_delete:
             response['delete_after'] = 3
+        await msg.channel.send(**response)
+
+    async def buyer(self, msg, arg=None, *args):
+        """Replies the user with the price of the given item
+        """
+        buyer_table = await self.get_buyer_table()
+        self_delete = False
+
+        if not arg:
+            await self.help(msg, 'buyer', intro='Please provide an item name')
+            return
+        if args:
+            arg = f'{arg} {" ".join(args)}'
+        item = arg
+        await self.buyers(msg, item)
+
+    async def buyers(self, msg, *args):
+        """Replies the user with the price of the given items (multiple)
+        """
+        buyer_table = await self.get_buyer_table()
+
+        if not args:
+            await self.help(msg, 'buyers', intro='Please provide an item name')
+            return
+        items = args
+
+        buyer_list = []
+        for item in items:
+            aliases = [item.lower(), item+'s'.lower(), item[:-1].lower() if item[-1] == 's' else '', item+' metal', 'sulfuric '+item]
+            found = False
+            for alias in aliases:
+                if not alias:
+                    continue
+                if alias in buyer_table:
+                    item_name, units, br_cost, in_cost, rc_cost, ratio = buyer_table[alias]
+                    if ratio == '-':
+                        ratio_msg = f' (the trader does not sell this item)'
+                    else:
+                        ratio_msg = f' (approximately {ratio} of Trader price)'
+                    buyer_list.append(f'• You can sell {units} {item_name} for {br_cost} Black rubles or {in_cost} Iron nuts or {rc_cost} Ration cards{ratio_msg}')
+                    found = True
+            if not found:
+                buyer_list.append(f'• The Buyer does not accept the item "{item}"')
+        content = '\n'.join(buyer_list)
+        response = {
+                'content': content,
+                'reference': msg.to_reference(),
+                'mention_author': True,
+                }
         await msg.channel.send(**response)
 
     async def workshop(self, msg, arg=None, *args):
@@ -1159,7 +1240,7 @@ class Controller:
             command = args[0]
             arg, desc, enabled, showhelp, delay = Controller.commands.get(command, (None, None, None, None, None))
             if desc and (sudo or enabled) and showhelp:
-                content = f'`{Controller.HELP_KEY}{command}{arg}`{desc}'
+                content = f'`{Controller.HELP_KEY}{command} {arg}` {desc}'
                 await msg.channel.send(**{
                     'content': content,
                     'reference': msg.to_reference(),
