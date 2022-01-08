@@ -1037,10 +1037,10 @@ class Controller:
                 if alias in buyer_table:
                     item_name, units, br_cost, in_cost, rc_cost, ratio = buyer_table[alias]
                     if ratio == '-':
-                        ratio_msg = f' (the trader does not sell this item)'
+                        ratio_msg = f'(the trader does not sell this item)'
                     else:
-                        ratio_msg = f' (approximately {ratio} of Trader price)'
-                    buyer_list.append(f'• You can sell {units} {item_name} for {br_cost} Black rubles or {in_cost} Iron nuts or {rc_cost} Ration cards{ratio_msg}')
+                        ratio_msg = f'(approximately {ratio} of Trader price)'
+                    buyer_list.append(f'• You can sell __{units} {item_name}__ for **{br_cost} Black rubles** or **{in_cost} Iron nuts** or **{rc_cost} Ration cards** {ratio_msg}')
                     found = True
             if not found:
                 buyer_list.append(f'• The Buyer does not accept the item "{item}"')
