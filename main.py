@@ -129,12 +129,18 @@ class Intent:
     NONE = 'None'
 
     @staticmethod
-    def get_intent(msg):
+    async def get_intent(msg):
         """Returns the intent of the message, as defined by the Intent class
         """
-        if (msg.reference and msg.reference.cached_message and msg.reference.cached_message.author == client.user
-                and msg.reference.cached_message.content.startswith(Controller.VERIFIER_WELCOME)):
-            return Intent.VERIFY2
+        if msg.channel.type == discord.ChannelType.private and msg.reference:
+            if not msg.reference.cached_message:
+                ref = await msg.channel.fetch_message(msg.reference.message_id)
+            else:
+                ref = msg.reference.cached_message
+            if ref.author == client.user and ref.content.startswith(Controller.VERIFIER_WELCOME):
+                return Intent.VERIFY2
+            else:
+                return Intent.NONE
         elif re.search(MapController.MAP_REGEX, msg.content) and client.user.id in msg.raw_mentions:
             return Intent.MAP
         elif re.match(Controller.KEY_REGEX, msg.content):
@@ -1321,8 +1327,11 @@ class Controller:
             return
         Controller.GUILD = discord.utils.get(client.guilds, id=396019800855281665)
         Controller.VERIFIER_CHANNEL = discord.utils.get(Controller.GUILD.channels, id=916767970217304114)
-        replied_msg = msg.reference.cached_message.content
-        orig_msg_id, username_tries = replied_msg.split('===', 2)[1:]
+        if msg.reference.cached_message is None:
+            replied_msg = await msg.channel.fetch_message(msg.reference.message_id)
+        else:
+            replied_msg = msg.reference.cached_message
+        orig_msg_id, username_tries = replied_msg.content.split('===', 2)[1:]
         orig_msg_id = int(orig_msg_id.strip())
         username, tries = username_tries.strip().split('\n')
         tries = len(tries)
@@ -1339,13 +1348,13 @@ class Controller:
                 orig_msg = await Controller.VERIFIER_CHANNEL.fetch_message(orig_msg_id)
                 await orig_msg.add_reaction('❌')
                 await orig_msg.remove_reaction('⏳', client.user)
-                await msg.reference.cached_message.edit(content=Controller.VERIFIER_INSTRUCTION)
+                await replied_msg.edit(content=Controller.VERIFIER_INSTRUCTION)
             else:
                 content = 'Error 2: Image does not seem to contain the keyword.\n'
                 content = f'{content}Please send the right image as a reply to the verification message sent above. '
                 content = f'{content}The screenshot should be on your Private chat tab with you sending the message '
                 content = f'{content}"dayr discord" (without quotes) as the last message.'
-                await msg.reference.cached_message.edit(content=replied_msg+'.')
+                await replied_msg.edit(content=replied_msg.content+'.')
         elif verification_status == VerificationStatus.USERNAME_MISMATCH:
             if tries == 3:
                 content = 'Error 3: Cannot match the given username with the image.\n'
@@ -1355,38 +1364,46 @@ class Controller:
                 orig_msg = await Controller.VERIFIER_CHANNEL.fetch_message(orig_msg_id)
                 await orig_msg.add_reaction('❌')
                 await orig_msg.remove_reaction('⏳', client.user)
-                await msg.reference.cached_message.edit(content=Controller.VERIFIER_INSTRUCTION)
+                await replied_msg.edit(content=Controller.VERIFIER_INSTRUCTION)
             else:
                 content = 'Error 3: Cannot match the given username with the image.\n'
                 content = f'{content}Please ensure you give the right username when starting this process. '
                 content = f'{content}You can try again by replying the verification instruction message above with another image, '
                 content = f'{content}or go through the manual verification process at by pinging Discord Moderator or Supporter.'
-                await msg.reference.cached_message.edit(content=replied_msg+'.')
+                await replied_msg.edit(content=replied_msg.content+'.')
         elif verification_status == VerificationStatus.VERIFIED:
             guild = Controller.GUILD
             orig_channel = Controller.VERIFIER_CHANNEL
             member = await guild.fetch_member(msg.author.id)
 
-            role = discord.utils.get(guild.roles, id=673729630230020106) # Wastelander (online)
-            await member.add_roles(role, reason='Bot verified')
-
-            role = discord.utils.get(guild.roles, id=917796458319712307) # Wastelander
-            await member.remove_roles(role, reason='Bot verified')
-
-            orig_msg = await orig_channel.fetch_message(orig_msg_id)
-            await orig_msg.add_reaction('🆗')
-            await orig_msg.remove_reaction('⏳', client.user)
-            await msg.reference.cached_message.edit(content=Controller.VERIFIER_INSTRUCTION)
             try:
-                await member.edit(nick=username)
-            except discord.errors.Forbidden:
-                # Ignore, as this means it's trying to verify mod
-                pass
+                orig_msg = await orig_channel.fetch_message(orig_msg_id)
+                await orig_msg.add_reaction('🆗')
+                await orig_msg.remove_reaction('⏳', client.user)
 
-            content = f'Verification successful. You are now verified. Welcome, {username}!\n'
-            content = f'{content}You have been given the role Wastelander (online), and your Discord nickname has been set to '
-            content = f'{content}{username}, the same as your in-game name, as per the rules in the server.\n'
-            content = f'{content}You can now chat in the trading channels.'
+                role = discord.utils.get(guild.roles, id=673729630230020106) # Wastelander (online)
+                await member.add_roles(role, reason='Bot verified')
+
+                role = discord.utils.get(guild.roles, id=917796458319712307) # Wastelander
+                await member.remove_roles(role, reason='Bot verified')
+                await replied_msg.edit(content=Controller.VERIFIER_INSTRUCTION)
+                try:
+                    await member.edit(nick=username)
+                except discord.errors.Forbidden:
+                    # Ignore, as this means it's trying to verify mod
+                    pass
+
+                content = f'Verification successful. You are now verified. Welcome, {username}!\n'
+                content = f'{content}You have been given the role Wastelander (online), and your Discord nickname has been set to '
+                content = f'{content}{username}, the same as your in-game name, as per the rules in the server.\n'
+                content = f'{content}You can now chat in the trading channels.'
+            except discord.errors.NotFound:
+                # Original message not found, cancel verification
+                content = 'Error 4: Verification request message origin not found.\n'
+                content = f'{content}This usually means you are replying to a very old verification message, and the '
+                content = f'{content}original message in the #wastelander-online-verification channel has already been'
+                content = f'{content} deleted. Please try again from the beginning.'
+
         await msg.channel.send(**{
             'content': content,
             'reference': msg.to_reference(),
@@ -1578,10 +1595,22 @@ class Controller:
 controller = Controller()
 
 @client.event
-async def on_reaction_add(reaction, user):
+async def on_raw_reaction_add(payload):
+    user_id = payload.user_id
+    channel_id = payload.channel_id
+    message_id = payload.message_id
+    emoji = payload.emoji.name
+    channel = client.get_channel(channel_id)
+    message = await channel.fetch_message(message_id)
     try:
-        if reaction.message.author == client.user and (reaction.message.channel.type == discord.ChannelType.private or reaction.message.reference.cached_message.author == user) and reaction.emoji == '❌':
-            await reaction.message.delete()
+        if message.author.id == client.user.id and emoji == '❌':
+            if not message.reference.cached_message:
+                replied_message = await channel.fetch_message(message.reference.message_id)
+            else:
+                replied_message = message.reference.cached_message
+            if message.channel.type == discord.ChannelType.private or replied_message.author.id == user_id:
+                await message.delete()
+                logging.info(f'Deleted message {message.id} via reaction')
     except Exception as e:
         logging.error(e)
         return
@@ -1609,7 +1638,7 @@ async def on_message(message):
     log_content += f'.\tAt {message.created_at}'
     logging.info(log_content)
 
-    intent = Intent.get_intent(message)
+    intent = await Intent.get_intent(message)
     logging.info(f'Intent: {intent}')
     if intent == Intent.VERIFY2:
         await controller.verify2(message)
