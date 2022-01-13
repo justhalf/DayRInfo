@@ -886,7 +886,7 @@ class Controller:
                         self.trading_table[base_name] = {}
                     trade_list = self.trading_table[base_name]
                     item_name = item.split(']]', 1)[1].strip(' []')
-                    if item_name in ['Coal']:
+                    if item_name in ['Coal', 'Brick']:
                         units = 10
                     elif item_name in ['Gunpowder', 'Sulfur', 'Saltpeter', 'Scrap', 'Lead', 'Machine oil']:
                         units = 100
