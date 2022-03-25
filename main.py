@@ -879,6 +879,8 @@ class Controller:
                     break
             wikitext = '\n'.join(wikilines[idx+1:])
             for row in wikitext.split('|-')[1:-1]:
+                if row.strip().startswith('<!--'):
+                    continue
                 try:
                     icon, base_name, item, price, currency, stock, min_level = row.split('||')
                     base_name = base_name.lower()
