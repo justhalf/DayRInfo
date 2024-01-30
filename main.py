@@ -320,6 +320,7 @@ class MapController:
         return cls.marker_image
 
 intents = discord.Intents.default()
+intents.message_content = True
 client = discord.Client(intents=intents)
 
 async def wait_until(dt):
