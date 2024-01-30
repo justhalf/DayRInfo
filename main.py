@@ -319,7 +319,8 @@ class MapController:
                 cls.marker_image = Image.open(infile).convert('RGBA').resize((32, 32))
         return cls.marker_image
 
-client = discord.Client()
+intents = discord.Intents.default()
+client = discord.Client(intents=intents)
 
 async def wait_until(dt):
     """Sleep until the specified datetime"""
