@@ -26,7 +26,6 @@ import time
 from datetime import datetime, timedelta
 from collections import Counter
 from verifier import Verifier, VerificationStatus
-from PIL import Image
 
 logging.basicConfig(level=logging.INFO)
 

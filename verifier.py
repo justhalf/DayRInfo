@@ -75,6 +75,8 @@ class Verifier:
                 idx = np.flatnonzero(heat_map>0.99*max_confidence)[-1] # Pick the latest match
                 y, x = np.unravel_index(idx, heat_map.shape)
                 confidence = heat_map[y,x]
+                # if self.debug:
+                #     print(f'font size: {font_size}, confidence: {confidence}')
                 if confidence >= best_confidence:
                     best_confidence = confidence
                     best_font_size = font_size
@@ -132,6 +134,8 @@ def main(args=None):
     parser.add_argument('--username', default='justhalf')
     parser.add_argument('--keyword', default='dayr discord')
     parser.add_argument('--debug', action='store_true')
+    parser.add_argument('--unittest', default=None,
+                        help='The path to TSV file specifying image path, username, keyword, and INVALID/USERNAME_MISMATCH/VERIFIED')
     args = parser.parse_args(args)
 
     imagepath = args.imagepath
@@ -139,15 +143,28 @@ def main(args=None):
     username = args.username
     keyword = args.keyword
     debug = args.debug
+    unittest = args.unittest
 
     verifier = Verifier(fontpath)
     if debug:
         verifier.debug = True
 
-    with open(imagepath, 'rb') as infile:
-        image = Image.open(infile, 'r').convert('RGBA')
+    if unittest:
+        with open(unittest, 'r') as infile:
+            for i, line in enumerate(infile):
+                imagepath, username, keyword, expected = line.strip().split('\t')
+                with open(imagepath, 'rb') as imfile:
+                    image = Image.open(imfile, 'r').convert('RGBA')
+                result = verifier.verify(image, username, keyword)
+                print(f'Test #{i}: {line.strip()}')
+                print(f'Expected: {expected}')
+                print(f'Result: {result}')
+                print(f'{"^^^" if expected!=result[0] else ""}')
+    else:
+        with open(imagepath, 'rb') as infile:
+            image = Image.open(infile, 'r').convert('RGBA')
 
-    print(verifier.verify(image, username, keyword))
+        print(verifier.verify(image, username, keyword))
 
 if __name__ == '__main__':
     main()
